@@ -20,10 +20,14 @@ int main(int argc, char *argv[])
     }
 
     QString fileName = args[0];
+
     auto rectangle = GeoMaps::GeoImage::readCoordinates(fileName);
 
     qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
-               << rectangle;
+               << rectangle.bottomLeft().longitude()
+               << rectangle.bottomRight().longitude()
+               << rectangle.bottomLeft().latitude()
+               << rectangle.topLeft().latitude() ;
 
     // Quick check if we can read the raster image
     QImage img(fileName);
