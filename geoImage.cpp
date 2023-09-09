@@ -176,7 +176,7 @@ private:
     friend class TiffFile;
 
     auto hasIfdEntry(quint16 tag) -> bool { return ifdEntry(tag).isValid(); }
-    auto ifdEntry(quint16 tag) const -> TiffIfdEntry
+    [[nodiscard]] auto ifdEntry(quint16 tag) const -> TiffIfdEntry
     {
         auto it = std::find_if(m_ifdEntries.cbegin(), m_ifdEntries.cend(),
                                [tag](const TiffIfdEntry &de) { return tag == de.tag(); });

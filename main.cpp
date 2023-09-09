@@ -4,9 +4,9 @@
 
 #include "geoImage.h"
 
-int main(int argc, char *argv[])
+auto main(int argc, char *argv[]) -> int
 {
-    QCoreApplication app(argc, argv);
+    QCoreApplication const app(argc, argv);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Test for geoImages");
@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
         parser.showHelp(-1);
     }
 
-    QString fileName = args[0];
+    const QString& fileName = args[0];
 
     auto rectangle = GeoMaps::GeoImage::readCoordinates(fileName);
 
@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
                << rectangle.topLeft().latitude() ;
 
     // Quick check if we can read the raster image
-    QImage img(fileName);
+    QImage const img(fileName);
     qWarning() << img;
     img.save("t.png");
 

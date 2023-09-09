@@ -35,7 +35,7 @@ namespace GeoMaps
          *  @return Coordinates of the image corners. If no valid georeferencing data was
          *  found, an invalid QGeoRectangle is returned
          */
-        static QGeoRectangle readCoordinates(const QString& path);
+        static auto readCoordinates(const QString &path) -> QGeoRectangle;
     };
 
 } // namespace GeoMaps
