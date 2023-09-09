@@ -1,5 +1,6 @@
 
 #include <QCommandLineParser>
+#include <QImage>
 
 #include "geoImage.h"
 
