@@ -12,55 +12,27 @@
 #include <QGeoRectangle>
 
 class QByteArray;
+class TiffFile;
 class TiffIfd;
 class TiffIfdEntry;
-class TiffIfdPrivate;
-class TiffFilePrivate;
 
-class TiffFile
-{
-public:
-    enum ByteOrder { LittleEndian, BigEndian };
-
-    TiffFile(const QString &filePath);
-    ~TiffFile();
-
-    [[nodiscard]] auto errorString() const -> QString;
-    [[nodiscard]] auto hasError() const -> bool;
-
-    // header information
-    [[nodiscard]] auto headerBytes() const -> QByteArray;
-    [[nodiscard]] auto isBigTiff() const -> bool;
-    [[nodiscard]] auto byteOrder() const -> ByteOrder;
-    [[nodiscard]] auto version() const -> int;
-    [[nodiscard]] auto ifd0Offset() const -> qint64;
-
-    [[nodiscard]] auto getRect() const -> QGeoRectangle;
-
-    // ifds
-    [[nodiscard]] auto ifds() const -> QVector<TiffIfd>;
-
-private:
-    QScopedPointer<TiffFilePrivate> d;
-};
-
-
+enum Tiff_ByteOrder { LittleEndian, BigEndian };
 
 
 namespace  {
 
-template<typename T> inline auto getValueFromBytes(const char *bytes, TiffFile::ByteOrder byteOrder) -> T
+template<typename T> inline auto getValueFromBytes(const char *bytes, Tiff_ByteOrder byteOrder) -> T
 {
-    if (byteOrder == TiffFile::LittleEndian)
+    if (byteOrder == LittleEndian)
     {
         return qFromLittleEndian<T>(reinterpret_cast<const uchar *>(bytes));
     }
     return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
 }
 
-template<typename T> inline auto fixValueByteOrder(T value, TiffFile::ByteOrder byteOrder) -> T
+template<typename T> inline auto fixValueByteOrder(T value, Tiff_ByteOrder byteOrder) -> T
 {
-    if (byteOrder == TiffFile::LittleEndian)
+    if (byteOrder == LittleEndian)
     {
         return qFromLittleEndian<T>(value);
     }
@@ -69,6 +41,14 @@ template<typename T> inline auto fixValueByteOrder(T value, TiffFile::ByteOrder 
 
 }
 
+
+
+QString err_256_not_set = QString::fromLatin1("Tag 256 is not set");
+QString err_257_not_set = QString::fromLatin1("Tag 257 is not set");
+QString err_33550_not_set = QString::fromLatin1("Tag 33550 is not set");
+QString err_33922_not_set = QString::fromLatin1("Tag 33922 is not set");
+QString err_file_read = QString::fromLatin1("File read error");
+QString err_seek_pos = QString::fromLatin1("Fail to seek pos: ");
 
 
 class TiffIfdEntry
@@ -105,7 +85,7 @@ public:
     [[nodiscard]] auto isValid() const -> bool { return m_count != 0U; }
 
 private:
-    friend class TiffFilePrivate;
+    friend class TiffFile;
 
     [[nodiscard]] auto typeSize() const -> int
     {
@@ -136,7 +116,7 @@ private:
         }
     }
 
-    void parserValues(const char *bytes, TiffFile::ByteOrder byteOrder)
+    void parserValues(const char *bytes, Tiff_ByteOrder byteOrder)
     {
         // To make things simple, save normal integer as qint32 or quint32 here.
         for (int i = 0; i < m_count; ++i)
@@ -148,7 +128,7 @@ private:
                 break;
             case TiffIfdEntry::DT_Double:
                 double f;
-                if (byteOrder == TiffFile::BigEndian)
+                if (byteOrder == BigEndian)
                 {
                     char rbytes[8];
                     rbytes[0] = bytes[i*8+7];
@@ -193,7 +173,7 @@ public:
     [[nodiscard]] auto isValid() const -> bool { return !m_ifdEntries.isEmpty(); }
 
 private:
-    friend class TiffFilePrivate;
+    friend class TiffFile;
 
     auto hasIfdEntry(quint16 tag) -> bool { return ifdEntry(tag).isValid(); }
     auto ifdEntry(quint16 tag) const -> TiffIfdEntry
@@ -212,12 +192,70 @@ private:
     qint64 m_nextIfdOffset{ 0 };
 };
 
-QString err_256_not_set = QString::fromLatin1("Tag 256 is not set");
-QString err_257_not_set = QString::fromLatin1("Tag 257 is not set");
-QString err_33550_not_set = QString::fromLatin1("Tag 33550 is not set");
-QString err_33922_not_set = QString::fromLatin1("Tag 33922 is not set");
-QString err_file_read = QString::fromLatin1("File read error");
-QString err_seek_pos = QString::fromLatin1("Fail to seek pos: ");
+class TiffFile
+{
+public:
+    TiffFile(const QString &filePath);
+    ~TiffFile() = default;
+
+    [[nodiscard]] auto errorString() const -> QString { return m_errorString; }
+    [[nodiscard]] auto hasError() const -> bool { return m_hasError; }
+
+    // header information
+    [[nodiscard]] auto headerBytes() const -> QByteArray { return m_header.rawBytes; }
+    [[nodiscard]] auto isBigTiff() const -> bool { return m_header.isBigTiff(); }
+    [[nodiscard]] auto byteOrder() const -> Tiff_ByteOrder { return m_header.byteOrder; }
+    [[nodiscard]] auto version() const -> int { return m_header.version; }
+    [[nodiscard]] auto ifd0Offset() const -> qint64 { return m_header.ifd0Offset; }
+
+    [[nodiscard]] auto getRect() const -> QGeoRectangle;
+
+    // ifds
+    [[nodiscard]] auto ifds() const -> QVector<TiffIfd> { return m_ifds; }
+
+private:
+    void setError(const QString &errorString);
+    auto readHeader() -> bool;
+    auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
+
+    template<typename T> auto getValueFromFile() -> T
+    {
+        T v{ 0 };
+        auto bytesRead = m_file.read(reinterpret_cast<char *>(&v), sizeof(T));
+        if (bytesRead != sizeof(T))
+        {
+            throw err_file_read;
+        }
+        return fixValueByteOrder(v, m_header.byteOrder);
+    }
+
+    struct Header
+    {
+        QByteArray rawBytes;
+        Tiff_ByteOrder byteOrder{ LittleEndian };
+        quint16 version{ 42 };
+        qint64 ifd0Offset{ 0 };
+
+        [[nodiscard]] auto isBigTiff() const -> bool { return version == 43; }
+    } m_header;
+
+    struct Geo
+    {
+        quint16 width = 0;
+        quint16 height = 0;
+        double longitute = 0;
+        double latitude = 0;
+        double pixelWidth = 0;
+        double pixelHeight = 0;
+    } m_geo;
+
+    QVector<TiffIfd> m_ifds;
+
+    QFile m_file;
+    QString m_errorString;
+    bool m_hasError {false};
+};
+
 
 auto GeoMaps::GeoImage::readCoordinates(const QString &path) -> QGeoRectangle
 {
@@ -244,63 +282,16 @@ auto GeoMaps::GeoImage::readCoordinates(const QString &path) -> QGeoRectangle
  */
 
 
-class TiffFilePrivate
+
+void TiffFile::setError(const QString &errorString)
 {
-public:
-    TiffFilePrivate();
-    void setError(const QString &errorString);
-    auto readHeader() -> bool;
-    auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
-
-    template<typename T> auto getValueFromFile() -> T
-    {
-        T v{ 0 };
-        auto bytesRead = file.read(reinterpret_cast<char *>(&v), sizeof(T));
-        if (bytesRead != sizeof(T))
-        {
-            throw err_file_read;
-        }
-        return fixValueByteOrder(v, header.byteOrder);
-    }
-
-    struct Header
-    {
-        QByteArray rawBytes;
-        TiffFile::ByteOrder byteOrder{ TiffFile::LittleEndian };
-        quint16 version{ 42 };
-        qint64 ifd0Offset{ 0 };
-
-        [[nodiscard]] auto isBigTiff() const -> bool { return version == 43; }
-    } header;
-
-    struct Geo
-    {
-        quint16 width = 0;
-        quint16 height = 0;
-        double longitute = 0;
-        double latitude = 0;
-        double pixelWidth = 0;
-        double pixelHeight = 0;
-    } geo;
-
-    QVector<TiffIfd> ifds;
-
-    QFile file;
-    QString errorString;
-    bool hasError{ false };
-};
-
-TiffFilePrivate::TiffFilePrivate() = default;
-
-void TiffFilePrivate::setError(const QString &errorString)
-{
-    hasError = true;
-    this->errorString = errorString;
+    m_hasError = true;
+    m_errorString = errorString;
 }
 
-auto TiffFilePrivate::readHeader() -> bool
+auto TiffFile::readHeader() -> bool
 {
-    auto headerBytes = file.peek(8);
+    auto headerBytes = m_file.peek(8);
     if (headerBytes.size() != 8)
     {
         setError(QStringLiteral("Invalid tiff file"));
@@ -311,11 +302,11 @@ auto TiffFilePrivate::readHeader() -> bool
     auto magicBytes = headerBytes.left(2);
     if (magicBytes == QByteArray("II"))
     {
-        header.byteOrder = TiffFile::LittleEndian;
+        m_header.byteOrder = LittleEndian;
     }
     else if (magicBytes == QByteArray("MM"))
     {
-        header.byteOrder = TiffFile::BigEndian;
+        m_header.byteOrder = BigEndian;
     }
     else
     {
@@ -324,39 +315,39 @@ auto TiffFilePrivate::readHeader() -> bool
     }
 
     // version
-    header.version = getValueFromBytes<quint16>(headerBytes.data() + 2, header.byteOrder);
-    if (header.version != 42 && header.version != 43)
+    m_header.version = getValueFromBytes<quint16>(headerBytes.data() + 2, m_header.byteOrder);
+    if (m_header.version != 42 && m_header.version != 43)
     {
         setError(QStringLiteral("Invalid tiff file: Unknown version"));
         return false;
     }
-    header.rawBytes = file.read(header.isBigTiff() ? 16 : 8);
+    m_header.rawBytes = m_file.read(m_header.isBigTiff() ? 16 : 8);
 
     // ifd0Offset
-    if (!header.isBigTiff())
+    if (!m_header.isBigTiff())
     {
-        header.ifd0Offset =
-            getValueFromBytes<quint32>(header.rawBytes.data() + 4, header.byteOrder);
+        m_header.ifd0Offset =
+            getValueFromBytes<quint32>(m_header.rawBytes.data() + 4, m_header.byteOrder);
     }
     else
     {
-        header.ifd0Offset = getValueFromBytes<qint64>(header.rawBytes.data() + 8, header.byteOrder);
+        m_header.ifd0Offset = getValueFromBytes<qint64>(m_header.rawBytes.data() + 8, m_header.byteOrder);
     }
 
     return true;
 }
 
-auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
+auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
 {
-    if (!file.seek(offset))
+    if (!m_file.seek(offset))
     {
-        setError(file.errorString());
+        setError(m_file.errorString());
         return false;
     }
 
     TiffIfd ifd;
 
-    if (!header.isBigTiff())
+    if (!m_header.isBigTiff())
     {
         auto const deCount = getValueFromFile<quint16>();
         for (int i = 0; i < deCount; ++i)
@@ -366,7 +357,7 @@ auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             dePrivate.m_tag = getValueFromFile<quint16>();
             dePrivate.m_type = getValueFromFile<quint16>();
             dePrivate.m_count = getValueFromFile<quint32>();
-            dePrivate.m_valueOrOffset = file.read(4);
+            dePrivate.m_valueOrOffset = m_file.read(4);
             if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
             {
                 ifd.m_ifdEntries.append(ifdEntry);
@@ -384,7 +375,7 @@ auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             dePrivate.m_tag = getValueFromFile<quint16>();
             dePrivate.m_type = getValueFromFile<quint16>();
             dePrivate.m_count = getValueFromFile<quint64>();
-            dePrivate.m_valueOrOffset = file.read(8);
+            dePrivate.m_valueOrOffset = m_file.read(8);
             if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
             {
                 ifd.m_ifdEntries.append(ifdEntry);
@@ -405,43 +396,43 @@ auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             continue;
         }
         QByteArray valueBytes;
-        if (!header.isBigTiff() && valueBytesCount > 4)
+        if (!m_header.isBigTiff() && valueBytesCount > 4)
         {
-            auto valueOffset = getValueFromBytes<quint32>(de.valueOrOffset(), header.byteOrder);
-            if (!file.seek(valueOffset))
+            auto valueOffset = getValueFromBytes<quint32>(de.valueOrOffset(), m_header.byteOrder);
+            if (!m_file.seek(valueOffset))
             {
                 throw err_seek_pos + QString::number(valueOffset);
             }
-            valueBytes = file.read(valueBytesCount);
+            valueBytes = m_file.read(valueBytesCount);
         }
-        else if (header.isBigTiff() && valueBytesCount > 8)
+        else if (m_header.isBigTiff() && valueBytesCount > 8)
         {
-            auto valueOffset = getValueFromBytes<quint64>(de.valueOrOffset(), header.byteOrder);
-            if (!file.seek(valueOffset))
+            auto valueOffset = getValueFromBytes<quint64>(de.valueOrOffset(), m_header.byteOrder);
+            if (!m_file.seek(valueOffset))
             {
                 throw err_seek_pos + QString::number(valueOffset);
             }
-            valueBytes = file.read(valueBytesCount);
+            valueBytes = m_file.read(valueBytesCount);
         }
         else
         {
             valueBytes = dePrivate.m_valueOrOffset;
         }
-        dePrivate.parserValues(valueBytes, header.byteOrder);
+        dePrivate.parserValues(valueBytes, m_header.byteOrder);
         if (dePrivate.m_tag == 256)
         {
-            geo.width = dePrivate.m_values.last().toInt();
+            m_geo.width = dePrivate.m_values.last().toInt();
         } else if (dePrivate.m_tag == 257)
         {
-            geo.height = dePrivate.m_values.last().toInt();
+            m_geo.height = dePrivate.m_values.last().toInt();
         } else if (dePrivate.m_tag == 33550)
         {
-            geo.pixelWidth = dePrivate.m_values.at(0).toDouble();
-            geo.pixelHeight = dePrivate.m_values.at(1).toDouble();
+            m_geo.pixelWidth = dePrivate.m_values.at(0).toDouble();
+            m_geo.pixelHeight = dePrivate.m_values.at(1).toDouble();
         } else if (dePrivate.m_tag == 33922)
         {
-            geo.longitute = dePrivate.m_values.at(3).toDouble();
-            geo.latitude = dePrivate.m_values.at(4).toDouble();
+            m_geo.longitute = dePrivate.m_values.at(3).toDouble();
+            m_geo.latitude = dePrivate.m_values.at(4).toDouble();
         }
     }
 
@@ -454,92 +445,49 @@ auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
  */
 
 TiffFile::TiffFile(const QString &filePath)
-    : d(new TiffFilePrivate)
 {
-    d->file.setFileName(filePath);
-    if (!d->file.open(QFile::ReadOnly))
+    m_file.setFileName(filePath);
+    if (!m_file.open(QFile::ReadOnly))
     {
-        d->hasError = true;
-        d->errorString = d->file.errorString();
+        m_hasError = true;
+        m_errorString = m_file.errorString();
     }
 
-    if (!d->readHeader())
+    if (!readHeader())
     {
         return;
     }
 
-    d->readIfd(d->header.ifd0Offset);
+    readIfd(m_header.ifd0Offset);
 }
 
-TiffFile::~TiffFile() = default;
 
 auto TiffFile::getRect() const -> QGeoRectangle
 {
-    if ((d->geo.longitute == 0) || (d->geo.latitude == 0))
+    if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
         throw err_33922_not_set;
     }
-    if ((d->geo.pixelWidth == 0) || (d->geo.pixelHeight == 0))
+    if ((m_geo.pixelWidth == 0) || (m_geo.pixelHeight == 0))
     {
         throw err_33550_not_set;
     }
-    if (d->geo.width == 0)
+    if (m_geo.width == 0)
     {
         throw err_256_not_set;
     }
-    if (d->geo.height == 0)
+    if (m_geo.height == 0)
     {
         throw err_257_not_set;
     }
 
     QGeoRectangle rect;
     QGeoCoordinate coord;
-    coord.setLongitude(d->geo.longitute);
-    coord.setLatitude(d->geo.latitude);
+    coord.setLongitude(m_geo.longitute);
+    coord.setLatitude(m_geo.latitude);
     rect.setTopLeft(coord);
-    coord.setLongitude(d->geo.longitute + (d->geo.width - 1) * d->geo.pixelWidth);
-    coord.setLatitude(d->geo.latitude + (d->geo.height - 1) * d->geo.pixelHeight);
+    coord.setLongitude(m_geo.longitute + (m_geo.width - 1) * m_geo.pixelWidth);
+    coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
     rect.setBottomRight(coord);
     return rect;
 }
-
-auto TiffFile::headerBytes() const -> QByteArray
-{
-    return d->header.rawBytes;
-}
-
-auto TiffFile::isBigTiff() const -> bool
-{
-    return d->header.isBigTiff();
-}
-
-auto TiffFile::byteOrder() const -> TiffFile::ByteOrder
-{
-    return d->header.byteOrder;
-}
-
-auto TiffFile::version() const -> int
-{
-    return d->header.version;
-}
-
-auto TiffFile::ifd0Offset() const -> qint64
-{
-    return d->header.ifd0Offset;
-}
-
-auto TiffFile::ifds() const -> QVector<TiffIfd>
-{
-    return d->ifds;
-}
-
-auto TiffFile::errorString() const -> QString
-{
-    return d->errorString;
-}
-
-auto TiffFile::hasError() const -> bool
-{
-    return d->hasError;
-}
-
