@@ -42,14 +42,14 @@ public:
     TiffIfdEntry(const TiffIfdEntry &other);
     ~TiffIfdEntry();
 
-    quint16 tag() const;
-    QString tagName() const;
-    quint16 type() const;
-    QString typeName() const;
-    quint64 count() const;
-    QByteArray valueOrOffset() const;
-    QVariantList values() const;
-    bool isValid() const;
+    [[nodiscard]] auto tag() const -> quint16;
+    [[nodiscard]] auto tagName() const -> QString;
+    [[nodiscard]] auto type() const -> quint16;
+    [[nodiscard]] auto typeName() const -> QString;
+    [[nodiscard]] auto count() const -> quint64;
+    [[nodiscard]] auto valueOrOffset() const -> QByteArray;
+    [[nodiscard]] auto values() const -> QVariantList;
+    [[nodiscard]] auto isValid() const -> bool;
 
 private:
     friend class TiffFilePrivate;
@@ -63,10 +63,10 @@ public:
     TiffIfd(const TiffIfd &other);
     ~TiffIfd();
 
-    QVector<TiffIfdEntry> ifdEntries() const;
-    QVector<TiffIfd> subIfds() const;
-    qint64 nextIfdOffset() const;
-    bool isValid() const;
+    [[nodiscard]] auto ifdEntries() const -> QVector<TiffIfdEntry>;
+    [[nodiscard]] auto subIfds() const -> QVector<TiffIfd>;
+    [[nodiscard]] auto nextIfdOffset() const -> qint64;
+    [[nodiscard]] auto isValid() const -> bool;
 
 private:
     friend class TiffFilePrivate;
@@ -81,20 +81,20 @@ public:
     TiffFile(const QString &filePath);
     ~TiffFile();
 
-    QString errorString() const;
-    bool hasError() const;
+    [[nodiscard]] auto errorString() const -> QString;
+    [[nodiscard]] auto hasError() const -> bool;
 
     // header information
-    QByteArray headerBytes() const;
-    bool isBigTiff() const;
-    ByteOrder byteOrder() const;
-    int version() const;
-    qint64 ifd0Offset() const;
+    [[nodiscard]] auto headerBytes() const -> QByteArray;
+    [[nodiscard]] auto isBigTiff() const -> bool;
+    [[nodiscard]] auto byteOrder() const -> ByteOrder;
+    [[nodiscard]] auto version() const -> int;
+    [[nodiscard]] auto ifd0Offset() const -> qint64;
 
-    QGeoRectangle getRect() const;
+    [[nodiscard]] auto getRect() const -> QGeoRectangle;
 
     // ifds
-    QVector<TiffIfd> ifds() const;
+    [[nodiscard]] auto ifds() const -> QVector<TiffIfd>;
 
 private:
     QScopedPointer<TiffFilePrivate> d;
@@ -108,39 +108,48 @@ QString err_33922_not_set = QString::fromLatin1("Tag 33922 is not set");
 QString err_file_read = QString::fromLatin1("File read error");
 QString err_seek_pos = QString::fromLatin1("Fail to seek pos: ");
 
-QGeoRectangle GeoMaps::GeoImage::readCoordinates(const QString& path)
+auto GeoMaps::GeoImage::readCoordinates(const QString &path) -> QGeoRectangle
 {
-    TiffFile tiff(path);
+    TiffFile const tiff(path);
 
-    try {
+    try
+    {
         return tiff.getRect();
-    } catch (QString ex) {
+    }
+    catch (QString& ex)
+    {
         qWarning() << " " << ex;
     }
 
     return {}; // Return a default-constructed (hence invalid) QGeoRectangle
 }
 
-template <typename T>
-static inline T getValueFromBytes(const char *bytes, TiffFile::ByteOrder byteOrder)
+namespace  {
+
+template<typename T> inline auto getValueFromBytes(const char *bytes, TiffFile::ByteOrder byteOrder) -> T
 {
     if (byteOrder == TiffFile::LittleEndian)
+    {
         return qFromLittleEndian<T>(reinterpret_cast<const uchar *>(bytes));
+    }
     return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
 }
 
-template <typename T>
-static inline T fixValueByteOrder(T value, TiffFile::ByteOrder byteOrder)
+template<typename T> inline auto fixValueByteOrder(T value, TiffFile::ByteOrder byteOrder) -> T
 {
     if (byteOrder == TiffFile::LittleEndian)
+    {
         return qFromLittleEndian<T>(value);
+    }
     return qFromBigEndian<T>(value);
+}
+
 }
 
 class TiffIfdEntryPrivate : public QSharedData
 {
 public:
-    TiffIfdEntryPrivate() {}
+    TiffIfdEntryPrivate() = default;
     TiffIfdEntryPrivate(const TiffIfdEntryPrivate &other)
         : QSharedData(other)
         , tag(other.tag)
@@ -149,9 +158,9 @@ public:
         , valueOrOffset(other.valueOrOffset)
     {
     }
-    ~TiffIfdEntryPrivate() {}
+    ~TiffIfdEntryPrivate() = default;
 
-    int typeSize()
+    auto typeSize() const -> int
     {
         switch (type) {
         case TiffIfdEntry::DT_Byte:
@@ -193,14 +202,15 @@ void TiffIfdEntryPrivate::parserValues(const char *bytes, TiffFile::ByteOrder by
 {
     // To make things simple, save normal integer as qint32 or quint32 here.
     for (int i = 0; i < count; ++i) {
-        QVariant variant;
+        QVariant const variant;
         switch (type) {
         case TiffIfdEntry::DT_Short:
             values.append(static_cast<quint32>(getValueFromBytes<quint16>(bytes + i * 2, byteOrder)));
             break;
         case TiffIfdEntry::DT_Double:
             double f;
-            if (byteOrder == TiffFile::BigEndian) {
+            if (byteOrder == TiffFile::BigEndian)
+            {
                 char rbytes[8];
                 rbytes[0] = bytes[i*8+7];
                 rbytes[1] = bytes[i*8+6];
@@ -211,7 +221,9 @@ void TiffIfdEntryPrivate::parserValues(const char *bytes, TiffFile::ByteOrder by
                 rbytes[6] = bytes[i*8+1];
                 rbytes[7] = bytes[i*8];
                 memcpy( &f, rbytes, 8 );
-            } else {
+            }
+            else
+            {
                 memcpy( &f, bytes + i * 8, 8 );
             }
             values.append(f);
@@ -231,77 +243,68 @@ TiffIfdEntry::TiffIfdEntry()
 {
 }
 
-TiffIfdEntry::TiffIfdEntry(const TiffIfdEntry &other)
-    : d(other.d)
-{
-}
+TiffIfdEntry::TiffIfdEntry(const TiffIfdEntry &other) = default;
 
-TiffIfdEntry::~TiffIfdEntry()
-{
-}
+TiffIfdEntry::~TiffIfdEntry() = default;
 
-quint16 TiffIfdEntry::tag() const
+auto TiffIfdEntry::tag() const -> quint16
 {
     return d->tag;
 }
 
-quint16 TiffIfdEntry::type() const
+auto TiffIfdEntry::type() const -> quint16
 {
     return d->type;
 }
 
-quint64 TiffIfdEntry::count() const
+auto TiffIfdEntry::count() const -> quint64
 {
     return d->count;
 }
 
-QByteArray TiffIfdEntry::valueOrOffset() const
+auto TiffIfdEntry::valueOrOffset() const -> QByteArray
 {
     return d->valueOrOffset;
 }
 
-QVariantList TiffIfdEntry::values() const
+auto TiffIfdEntry::values() const -> QVariantList
 {
     return d->values;
 }
 
-bool TiffIfdEntry::isValid() const
+auto TiffIfdEntry::isValid() const -> bool
 {
-    return d->count;
+    return d->count != 0U;
 }
 
 class TiffIfdPrivate : public QSharedData
 {
 public:
-    TiffIfdPrivate() {}
-    TiffIfdPrivate(const TiffIfdPrivate &other)
-        : QSharedData(other)
-        , ifdEntries(other.ifdEntries)
-        , subIfds(other.subIfds)
-        , nextIfdOffset(other.nextIfdOffset)
-    {
-    }
-    ~TiffIfdPrivate() {}
+    TiffIfdPrivate() = default;
+    TiffIfdPrivate(const TiffIfdPrivate &other) = default;
+    ~TiffIfdPrivate() = default;
 
-    bool hasIfdEntry(quint16 tag);
-    TiffIfdEntry ifdEntry(quint16 tag);
+    auto hasIfdEntry(quint16 tag) -> bool;
+    auto ifdEntry(quint16 tag) const -> TiffIfdEntry;
 
     QVector<TiffIfdEntry> ifdEntries;
     QVector<TiffIfd> subIfds;
     qint64 nextIfdOffset{ 0 };
 };
 
-bool TiffIfdPrivate::hasIfdEntry(quint16 tag)
+auto TiffIfdPrivate::hasIfdEntry(quint16 tag) -> bool
 {
     return ifdEntry(tag).isValid();
 }
 
-TiffIfdEntry TiffIfdPrivate::ifdEntry(quint16 tag)
+auto TiffIfdPrivate::ifdEntry(quint16 tag) const -> TiffIfdEntry
 {
     auto it = std::find_if(ifdEntries.cbegin(), ifdEntries.cend(),
                            [tag](const TiffIfdEntry &de) { return tag == de.tag(); });
     if (it == ifdEntries.cend())
-        return TiffIfdEntry();
+    {
+        return {};
+    }
     return *it;
 }
 
@@ -314,31 +317,26 @@ TiffIfd::TiffIfd()
 {
 }
 
-TiffIfd::TiffIfd(const TiffIfd &other)
-    : d(other.d)
-{
-}
+TiffIfd::TiffIfd(const TiffIfd &other) = default;
 
-TiffIfd::~TiffIfd()
-{
-}
+TiffIfd::~TiffIfd() = default;
 
-QVector<TiffIfdEntry> TiffIfd::ifdEntries() const
+auto TiffIfd::ifdEntries() const -> QVector<TiffIfdEntry>
 {
     return d->ifdEntries;
 }
 
-QVector<TiffIfd> TiffIfd::subIfds() const
+auto TiffIfd::subIfds() const -> QVector<TiffIfd>
 {
     return d->subIfds;
 }
 
-qint64 TiffIfd::nextIfdOffset() const
+auto TiffIfd::nextIfdOffset() const -> qint64
 {
     return d->nextIfdOffset;
 }
 
-bool TiffIfd::isValid() const
+auto TiffIfd::isValid() const -> bool
 {
     return !d->ifdEntries.isEmpty();
 }
@@ -348,15 +346,15 @@ class TiffFilePrivate
 public:
     TiffFilePrivate();
     void setError(const QString &errorString);
-    bool readHeader();
-    bool readIfd(qint64 offset, TiffIfd *parentIfd = nullptr);
+    auto readHeader() -> bool;
+    auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
 
-    template <typename T>
-    T getValueFromFile()
+    template<typename T> auto getValueFromFile() -> T
     {
         T v{ 0 };
         auto bytesRead = file.read(reinterpret_cast<char *>(&v), sizeof(T));
-        if (bytesRead != sizeof(T)) {
+        if (bytesRead != sizeof(T))
+        {
             throw err_file_read;
         }
         return fixValueByteOrder(v, header.byteOrder);
@@ -369,7 +367,7 @@ public:
         quint16 version{ 42 };
         qint64 ifd0Offset{ 0 };
 
-        bool isBigTiff() const { return version == 43; }
+        [[nodiscard]] auto isBigTiff() const -> bool { return version == 43; }
     } header;
 
     struct Geo
@@ -389,9 +387,7 @@ public:
     bool hasError{ false };
 };
 
-TiffFilePrivate::TiffFilePrivate()
-{
-}
+TiffFilePrivate::TiffFilePrivate() = default;
 
 void TiffFilePrivate::setError(const QString &errorString)
 {
@@ -399,28 +395,35 @@ void TiffFilePrivate::setError(const QString &errorString)
     this->errorString = errorString;
 }
 
-bool TiffFilePrivate::readHeader()
+auto TiffFilePrivate::readHeader() -> bool
 {
     auto headerBytes = file.peek(8);
-    if (headerBytes.size() != 8) {
+    if (headerBytes.size() != 8)
+    {
         setError(QStringLiteral("Invalid tiff file"));
         return false;
     }
 
     // magic bytes
     auto magicBytes = headerBytes.left(2);
-    if (magicBytes == QByteArray("II")) {
+    if (magicBytes == QByteArray("II"))
+    {
         header.byteOrder = TiffFile::LittleEndian;
-    } else if (magicBytes == QByteArray("MM")) {
+    }
+    else if (magicBytes == QByteArray("MM"))
+    {
         header.byteOrder = TiffFile::BigEndian;
-    } else {
+    }
+    else
+    {
         setError(QStringLiteral("Invalid tiff file"));
         return false;
     }
 
     // version
     header.version = getValueFromBytes<quint16>(headerBytes.data() + 2, header.byteOrder);
-    if (!(header.version == 42 || header.version == 43)) {
+    if (header.version != 42 && header.version != 43)
+    {
         setError(QStringLiteral("Invalid tiff file: Unknown version"));
         return false;
     }
@@ -428,47 +431,59 @@ bool TiffFilePrivate::readHeader()
 
     // ifd0Offset
     if (!header.isBigTiff())
+    {
         header.ifd0Offset =
             getValueFromBytes<quint32>(header.rawBytes.data() + 4, header.byteOrder);
+    }
     else
+    {
         header.ifd0Offset = getValueFromBytes<qint64>(header.rawBytes.data() + 8, header.byteOrder);
+    }
 
     return true;
 }
 
-bool TiffFilePrivate::readIfd(qint64 offset, TiffIfd *parentIfd)
+auto TiffFilePrivate::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
 {
-    if (!file.seek(offset)) {
+    if (!file.seek(offset))
+    {
         setError(file.errorString());
         return false;
     }
 
     TiffIfd ifd;
 
-    if (!header.isBigTiff()) {
-        quint16 deCount = getValueFromFile<quint16>();
-        for (int i = 0; i < deCount; ++i) {
+    if (!header.isBigTiff())
+    {
+        auto const deCount = getValueFromFile<quint16>();
+        for (int i = 0; i < deCount; ++i)
+        {
             TiffIfdEntry ifdEntry;
             auto &dePrivate = ifdEntry.d;
             dePrivate->tag = getValueFromFile<quint16>();
             dePrivate->type = getValueFromFile<quint16>();
             dePrivate->count = getValueFromFile<quint32>();
             dePrivate->valueOrOffset = file.read(4);
-            if ((dePrivate->tag == 256) || (dePrivate->tag == 257) || (dePrivate->tag == 33550) || (dePrivate->tag == 33922)) {
+            if ((dePrivate->tag == 256) || (dePrivate->tag == 257) || (dePrivate->tag == 33550) || (dePrivate->tag == 33922))
+            {
                 ifd.d->ifdEntries.append(ifdEntry);
             }
         }
         ifd.d->nextIfdOffset = getValueFromFile<quint32>();
-    } else {
-        quint64 deCount = getValueFromFile<quint64>();
-        for (quint64 i = 0; i < deCount; ++i) {
+    }
+    else
+    {
+        auto const deCount = getValueFromFile<quint64>();
+        for (quint64 i = 0; i < deCount; ++i)
+        {
             TiffIfdEntry ifdEntry;
             auto &dePrivate = ifdEntry.d;
             dePrivate->tag = getValueFromFile<quint16>();
             dePrivate->type = getValueFromFile<quint16>();
             dePrivate->count = getValueFromFile<quint64>();
             dePrivate->valueOrOffset = file.read(8);
-            if ((dePrivate->tag == 256) || (dePrivate->tag == 257) || (dePrivate->tag == 33550) || (dePrivate->tag == 33922)) {
+            if ((dePrivate->tag == 256) || (dePrivate->tag == 257) || (dePrivate->tag == 33550) || (dePrivate->tag == 33922))
+            {
                 ifd.d->ifdEntries.append(ifdEntry);
             }
         }
@@ -476,38 +491,52 @@ bool TiffFilePrivate::readIfd(qint64 offset, TiffIfd *parentIfd)
     }
 
     // parser data of ifdEntry
-    foreach (auto de, ifd.ifdEntries()) {
+    foreach (auto de, ifd.ifdEntries())
+    {
         auto &dePrivate = de.d;
 
         auto valueBytesCount = dePrivate->count * dePrivate->typeSize();
         // skip unknown datatype
         if (valueBytesCount == 0)
+        {
             continue;
+        }
         QByteArray valueBytes;
-        if (!header.isBigTiff() && valueBytesCount > 4) {
+        if (!header.isBigTiff() && valueBytesCount > 4)
+        {
             auto valueOffset = getValueFromBytes<quint32>(de.valueOrOffset(), header.byteOrder);
-            if (!file.seek(valueOffset)) {
+            if (!file.seek(valueOffset))
+            {
                 throw err_seek_pos + QString::number(valueOffset);
             }
             valueBytes = file.read(valueBytesCount);
-        } else if (header.isBigTiff() && valueBytesCount > 8) {
+        }
+        else if (header.isBigTiff() && valueBytesCount > 8)
+        {
             auto valueOffset = getValueFromBytes<quint64>(de.valueOrOffset(), header.byteOrder);
-            if (!file.seek(valueOffset)) {
+            if (!file.seek(valueOffset))
+            {
                 throw err_seek_pos + QString::number(valueOffset);
             }
             valueBytes = file.read(valueBytesCount);
-        } else {
+        }
+        else
+        {
             valueBytes = dePrivate->valueOrOffset;
         }
         dePrivate->parserValues(valueBytes, header.byteOrder);
-        if (dePrivate->tag == 256) {
+        if (dePrivate->tag == 256)
+        {
             geo.width = dePrivate->values.last().toInt();
-        } else if (dePrivate->tag == 257) {
+        } else if (dePrivate->tag == 257)
+        {
             geo.height = dePrivate->values.last().toInt();
-        } else if (dePrivate->tag == 33550) {
+        } else if (dePrivate->tag == 33550)
+        {
             geo.pixelWidth = dePrivate->values.at(0).toDouble();
             geo.pixelHeight = dePrivate->values.at(1).toDouble();
-        } else if (dePrivate->tag == 33922) {
+        } else if (dePrivate->tag == 33922)
+        {
             geo.longitute = dePrivate->values.at(3).toDouble();
             geo.latitude = dePrivate->values.at(4).toDouble();
         }
@@ -523,37 +552,43 @@ bool TiffFilePrivate::readIfd(qint64 offset, TiffIfd *parentIfd)
 /*!
  * Constructs the TiffFile object.
  */
+
 TiffFile::TiffFile(const QString &filePath)
     : d(new TiffFilePrivate)
 {
     d->file.setFileName(filePath);
-    if (!d->file.open(QFile::ReadOnly)) {
+    if (!d->file.open(QFile::ReadOnly))
+    {
         d->hasError = true;
         d->errorString = d->file.errorString();
     }
 
     if (!d->readHeader())
+    {
         return;
+    }
 
     d->readIfd(d->header.ifd0Offset);
 }
 
-TiffFile::~TiffFile()
-{
-}
+TiffFile::~TiffFile() = default;
 
-QGeoRectangle TiffFile::getRect() const
+auto TiffFile::getRect() const -> QGeoRectangle
 {
-    if ((d->geo.longitute == 0) || (d->geo.latitude == 0)) {
+    if ((d->geo.longitute == 0) || (d->geo.latitude == 0))
+    {
         throw err_33922_not_set;
     }
-    if ((d->geo.pixelWidth == 0) || (d->geo.pixelHeight == 0)) {
+    if ((d->geo.pixelWidth == 0) || (d->geo.pixelHeight == 0))
+    {
         throw err_33550_not_set;
     }
-    if (d->geo.width == 0) {
+    if (d->geo.width == 0)
+    {
         throw err_256_not_set;
     }
-    if (d->geo.height == 0){
+    if (d->geo.height == 0)
+    {
         throw err_257_not_set;
     }
 
@@ -568,42 +603,42 @@ QGeoRectangle TiffFile::getRect() const
     return rect;
 }
 
-QByteArray TiffFile::headerBytes() const
+auto TiffFile::headerBytes() const -> QByteArray
 {
     return d->header.rawBytes;
 }
 
-bool TiffFile::isBigTiff() const
+auto TiffFile::isBigTiff() const -> bool
 {
     return d->header.isBigTiff();
 }
 
-TiffFile::ByteOrder TiffFile::byteOrder() const
+auto TiffFile::byteOrder() const -> TiffFile::ByteOrder
 {
     return d->header.byteOrder;
 }
 
-int TiffFile::version() const
+auto TiffFile::version() const -> int
 {
     return d->header.version;
 }
 
-qint64 TiffFile::ifd0Offset() const
+auto TiffFile::ifd0Offset() const -> qint64
 {
     return d->header.ifd0Offset;
 }
 
-QVector<TiffIfd> TiffFile::ifds() const
+auto TiffFile::ifds() const -> QVector<TiffIfd>
 {
     return d->ifds;
 }
 
-QString TiffFile::errorString() const
+auto TiffFile::errorString() const -> QString
 {
     return d->errorString;
 }
 
-bool TiffFile::hasError() const
+auto TiffFile::hasError() const -> bool
 {
     return d->hasError;
 }
