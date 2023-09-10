@@ -25,7 +25,7 @@
 
 namespace GeoMaps
 {
-    class GeoImage
+    class GeoTIFF
     {
     public:
         /*! \brief Reads coordinates from a georeferenced image file

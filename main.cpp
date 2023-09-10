@@ -2,7 +2,7 @@
 #include <QCommandLineParser>
 #include <QImage>
 
-#include "geoImage.h"
+#include "GeoTIFF.h"
 
 auto main(int argc, char *argv[]) -> int
 {
@@ -22,7 +22,7 @@ auto main(int argc, char *argv[]) -> int
 
     const QString& fileName = args[0];
 
-    auto rectangle = GeoMaps::GeoImage::readCoordinates(fileName);
+    auto rectangle = GeoMaps::GeoTIFF::readCoordinates(fileName);
 
     qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
                << rectangle.bottomLeft().longitude()

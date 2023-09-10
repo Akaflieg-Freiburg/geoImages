@@ -1,9 +1,44 @@
+
+
+/****************************************************************************
+ *
+ * This file contains code based on Debao Zhang's QtTiffTagViewer
+ *
+ * https://github.com/dbzhang800/QtTiffTagViewer
+ *
+ * The code for QtTiffTagViewer is licensed as follows:
+ *
+ * Copyright (c) 2018 Debao Zhang <hello@debao.me>
+ * All right reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ ****************************************************************************/
+
+
 #include <QImage>
 #include <QScopedPointer>
 #include <QVector>
 #include <QVariant>
 #include <QExplicitlySharedDataPointer>
-#include "geoImage.h"
+#include "GeoTIFF.h"
 #include <QFile>
 #include <QLoggingCategory>
 #include <QtEndian>
@@ -72,17 +107,6 @@ public:
         DT_SLong8,
         DT_Ifd8
     };
-
-    TiffIfdEntry() = default;;
-    TiffIfdEntry(const TiffIfdEntry &other) = default;;
-    ~TiffIfdEntry() = default;;
-
-    [[nodiscard]] auto tag() const -> quint16 { return m_tag; }
-    [[nodiscard]] auto type() const -> quint16 { return m_type; }
-    [[nodiscard]] auto count() const -> quint64 { return m_count; }
-    [[nodiscard]] auto valueOrOffset() const -> QByteArray { return m_valueOrOffset; }
-    [[nodiscard]] auto values() const -> QVariantList {return m_values; }
-    [[nodiscard]] auto isValid() const -> bool { return m_count != 0U; }
 
 private:
     friend class TiffFile;
@@ -162,33 +186,9 @@ private:
 
 class TiffIfd
 {
-public:
-    TiffIfd() = default;
-    TiffIfd(const TiffIfd &other) = default;
-    ~TiffIfd() = default;
-
-    [[nodiscard]] auto ifdEntries() const -> QVector<TiffIfdEntry> { return m_ifdEntries; }
-    [[nodiscard]] auto subIfds() const -> QVector<TiffIfd> { return m_subIfds; }
-    [[nodiscard]] auto nextIfdOffset() const -> qint64 { return m_nextIfdOffset; }
-    [[nodiscard]] auto isValid() const -> bool { return !m_ifdEntries.isEmpty(); }
-
-private:
     friend class TiffFile;
 
-    auto hasIfdEntry(quint16 tag) -> bool { return ifdEntry(tag).isValid(); }
-    [[nodiscard]] auto ifdEntry(quint16 tag) const -> TiffIfdEntry
-    {
-        auto it = std::find_if(m_ifdEntries.cbegin(), m_ifdEntries.cend(),
-                               [tag](const TiffIfdEntry &de) { return tag == de.tag(); });
-        if (it == m_ifdEntries.cend())
-        {
-            return {};
-        }
-        return *it;
-    }
-
     QVector<TiffIfdEntry> m_ifdEntries;
-    QVector<TiffIfd> m_subIfds;
     qint64 m_nextIfdOffset{ 0 };
 };
 
@@ -196,22 +196,9 @@ class TiffFile
 {
 public:
     TiffFile(const QString &filePath);
-    ~TiffFile() = default;
-
-    [[nodiscard]] auto errorString() const -> QString { return m_errorString; }
-    [[nodiscard]] auto hasError() const -> bool { return m_hasError; }
-
-    // header information
-    [[nodiscard]] auto headerBytes() const -> QByteArray { return m_header.rawBytes; }
-    [[nodiscard]] auto isBigTiff() const -> bool { return m_header.isBigTiff(); }
-    [[nodiscard]] auto byteOrder() const -> Tiff_ByteOrder { return m_header.byteOrder; }
-    [[nodiscard]] auto version() const -> int { return m_header.version; }
-    [[nodiscard]] auto ifd0Offset() const -> qint64 { return m_header.ifd0Offset; }
 
     [[nodiscard]] auto getRect() const -> QGeoRectangle;
 
-    // ifds
-    [[nodiscard]] auto ifds() const -> QVector<TiffIfd> { return m_ifds; }
 
 private:
     void setError(const QString &errorString);
@@ -257,7 +244,7 @@ private:
 };
 
 
-auto GeoMaps::GeoImage::readCoordinates(const QString &path) -> QGeoRectangle
+auto GeoMaps::GeoTIFF::readCoordinates(const QString& path) -> QGeoRectangle
 {
     TiffFile const tiff(path);
 
@@ -288,6 +275,7 @@ void TiffFile::setError(const QString &errorString)
     m_hasError = true;
     m_errorString = errorString;
 }
+
 
 auto TiffFile::readHeader() -> bool
 {
@@ -385,7 +373,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
     }
 
     // parser data of ifdEntry
-    foreach (auto de, ifd.ifdEntries())
+    foreach (auto de, ifd.m_ifdEntries)
     {
         auto &dePrivate = de;
 
@@ -398,7 +386,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         QByteArray valueBytes;
         if (!m_header.isBigTiff() && valueBytesCount > 4)
         {
-            auto valueOffset = getValueFromBytes<quint32>(de.valueOrOffset(), m_header.byteOrder);
+            auto valueOffset = getValueFromBytes<quint32>(de.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek(valueOffset))
             {
                 throw err_seek_pos + QString::number(valueOffset);
@@ -407,7 +395,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         }
         else if (m_header.isBigTiff() && valueBytesCount > 8)
         {
-            auto valueOffset = getValueFromBytes<quint64>(de.valueOrOffset(), m_header.byteOrder);
+            auto valueOffset = getValueFromBytes<quint64>(de.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek(valueOffset))
             {
                 throw err_seek_pos + QString::number(valueOffset);

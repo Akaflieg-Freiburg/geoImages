@@ -13,8 +13,8 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Positioning)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Positioning)
 
 add_executable(geoImages
-    geoImage.cpp
-    geoImage.h
+    GeoTIFF.cpp
+    GeoTIFF.h
     main.cpp
 )
 target_link_libraries(geoImages Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Positioning)
