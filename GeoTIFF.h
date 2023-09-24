@@ -25,25 +25,22 @@
 
 namespace GeoMaps
 {
+    struct GeoTiffMeta {
+        QGeoRectangle rect;
+        QString desc;
+    };
+
     class GeoTIFF
     {
     public:
-        /*! \brief Reads coordinates from a georeferenced image file
+        /*! \brief Reads coordinates and description from a georeferenced image file
          *
          *  @param path File path for a georeferenced image file
          *
-         *  @return Coordinates of the image corners. If no valid georeferencing data was
-         *  found, an invalid QGeoRectangle is returned
+         *  @return Coordinates of the image corners and description of the image.
+         *  If no valid georeferencing data was found, an invalid GeoTiffMeta is returned
          */
-        static auto readCoordinates(const QString &path) -> QGeoRectangle;
-
-        /*! \brief Reads Image Description from a georeferenced image file
-         *
-         *  @param path File path for a georeferenced image file
-         *
-         *  @return Description of the Image; if not set, an empty description is returned
-         */
-        static auto readDescription(const QString &path) -> QString;
+        static auto readMetaData(const QString &path) -> GeoTiffMeta;
     };
 
 } // namespace GeoMaps
