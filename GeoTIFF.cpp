@@ -210,9 +210,7 @@ class TiffFile
 public:
     TiffFile(const QString &filePath);
 
-    [[nodiscard]] auto getRect() const -> QGeoRectangle;
-
-    [[nodiscard]] auto getDesc() const -> QString;
+    [[nodiscard]] auto getMeta() const -> GeoMaps::GeoTiffMeta;
 
 
 private:
@@ -260,37 +258,20 @@ private:
 };
 
 
-auto GeoMaps::GeoTIFF::readCoordinates(const QString& path) -> QGeoRectangle
+auto GeoMaps::GeoTIFF::readMetaData(const QString& path) -> GeoTiffMeta
 {
     TiffFile const tiff(path);
 
     try
     {
-        return tiff.getRect();
+        return tiff.getMeta();
     }
     catch (QString& ex)
     {
         qWarning() << " " << ex;
     }
 
-    return {}; // Return a default-constructed (hence invalid) QGeoRectangle
-}
-
-
-auto GeoMaps::GeoTIFF::readDescription(const QString& path) -> QString
-{
-    TiffFile const tiff(path);
-
-    try
-    {
-        return tiff.getDesc();
-    }
-    catch (QString& ex)
-    {
-        qWarning() << " " << ex;
-    }
-
-    return QString();
+    return {}; // Return a default-constructed (hence invalid) GeoTiffMeta
 }
 
 
@@ -485,7 +466,7 @@ TiffFile::TiffFile(const QString &filePath)
 }
 
 
-auto TiffFile::getRect() const -> QGeoRectangle
+auto TiffFile::getMeta() const -> GeoMaps::GeoTiffMeta
 {
     if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
@@ -504,19 +485,14 @@ auto TiffFile::getRect() const -> QGeoRectangle
         throw err_257_not_set;
     }
 
-    QGeoRectangle rect;
+    GeoMaps::GeoTiffMeta meta;
     QGeoCoordinate coord;
     coord.setLongitude(m_geo.longitute);
     coord.setLatitude(m_geo.latitude);
-    rect.setTopLeft(coord);
+    meta.rect.setTopLeft(coord);
     coord.setLongitude(m_geo.longitute + (m_geo.width - 1) * m_geo.pixelWidth);
     coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
-    rect.setBottomRight(coord);
-    return rect;
-}
-
-
-auto TiffFile::getDesc() const -> QString
-{
-    return m_geo.desc;
+    meta.rect.setBottomRight(coord);
+    meta.desc = m_geo.desc;
+    return meta;
 }
