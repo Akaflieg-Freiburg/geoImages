@@ -21,7 +21,6 @@ auto main(int argc, char *argv[]) -> int
     }
 
     const QString& fileName = args[0];
-
     auto rectangle = GeoMaps::GeoTIFF::readCoordinates(fileName);
 
     qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
@@ -34,6 +33,10 @@ auto main(int argc, char *argv[]) -> int
     QImage const img(fileName);
     qWarning() << img;
     img.save("t.png");
+
+    QString desc = GeoMaps::GeoTIFF::readDescription(fileName);
+
+    qWarning() << u"Description of the image" << desc;
 
     return 0;
 }
