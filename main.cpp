@@ -21,22 +21,20 @@ auto main(int argc, char *argv[]) -> int
     }
 
     const QString& fileName = args[0];
-    auto rectangle = GeoMaps::GeoTIFF::readCoordinates(fileName);
+    GeoMaps::GeoTiffMeta geoTiffMeta = GeoMaps::GeoTIFF::readMetaData(fileName);
 
     qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
-               << rectangle.bottomLeft().longitude()
-               << rectangle.bottomRight().longitude()
-               << rectangle.bottomLeft().latitude()
-               << rectangle.topLeft().latitude() ;
+               << geoTiffMeta.rect.bottomLeft().longitude()
+               << geoTiffMeta.rect.bottomRight().longitude()
+               << geoTiffMeta.rect.bottomLeft().latitude()
+               << geoTiffMeta.rect.topLeft().latitude() ;
+
+    qWarning() << u"Description of the image" << geoTiffMeta.desc;
 
     // Quick check if we can read the raster image
     QImage const img(fileName);
     qWarning() << img;
     img.save("t.png");
-
-    QString desc = GeoMaps::GeoTIFF::readDescription(fileName);
-
-    qWarning() << u"Description of the image" << desc;
 
     return 0;
 }
