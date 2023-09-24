@@ -36,6 +36,14 @@ namespace GeoMaps
          *  found, an invalid QGeoRectangle is returned
          */
         static auto readCoordinates(const QString &path) -> QGeoRectangle;
+
+        /*! \brief Reads Image Description from a georeferenced image file
+         *
+         *  @param path File path for a georeferenced image file
+         *
+         *  @return Description of the Image; if not set, an empty description is returned
+         */
+        static auto readDescription(const QString &path) -> QString;
     };
 
 } // namespace GeoMaps
