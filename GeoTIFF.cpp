@@ -142,6 +142,19 @@ private:
 
     void parserValues(const char *bytes, Tiff_ByteOrder byteOrder)
     {
+        if (m_type == TiffIfdEntry::DT_Ascii) {
+            int start = 0;
+            for (int i = 0; i < m_count; ++i) {
+                if (bytes[i] == '\0') {
+                    m_values.append(QString::fromLatin1(bytes + start, i - start));
+                    start = i + 1;
+                }
+            }
+            if (bytes[m_count - 1] != '\0') {
+                m_values.append(QString::fromLatin1(bytes + start, m_count - start));
+            }
+            return;
+        }
         // To make things simple, save normal integer as qint32 or quint32 here.
         for (int i = 0; i < m_count; ++i)
         {
@@ -199,6 +212,8 @@ public:
 
     [[nodiscard]] auto getRect() const -> QGeoRectangle;
 
+    [[nodiscard]] auto getDesc() const -> QString;
+
 
 private:
     void setError(const QString &errorString);
@@ -234,6 +249,7 @@ private:
         double latitude = 0;
         double pixelWidth = 0;
         double pixelHeight = 0;
+        QString desc;
     } m_geo;
 
     QVector<TiffIfd> m_ifds;
@@ -260,6 +276,22 @@ auto GeoMaps::GeoTIFF::readCoordinates(const QString& path) -> QGeoRectangle
     return {}; // Return a default-constructed (hence invalid) QGeoRectangle
 }
 
+
+auto GeoMaps::GeoTIFF::readDescription(const QString& path) -> QString
+{
+    TiffFile const tiff(path);
+
+    try
+    {
+        return tiff.getDesc();
+    }
+    catch (QString& ex)
+    {
+        qWarning() << " " << ex;
+    }
+
+    return QString();
+}
 
 
 
@@ -346,7 +378,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             dePrivate.m_type = getValueFromFile<quint16>();
             dePrivate.m_count = getValueFromFile<quint32>();
             dePrivate.m_valueOrOffset = m_file.read(4);
-            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
+            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
             {
                 ifd.m_ifdEntries.append(ifdEntry);
             }
@@ -364,7 +396,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             dePrivate.m_type = getValueFromFile<quint16>();
             dePrivate.m_count = getValueFromFile<quint64>();
             dePrivate.m_valueOrOffset = m_file.read(8);
-            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
+            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
             {
                 ifd.m_ifdEntries.append(ifdEntry);
             }
@@ -413,6 +445,9 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         } else if (dePrivate.m_tag == 257)
         {
             m_geo.height = dePrivate.m_values.last().toInt();
+        } else if (dePrivate.m_tag == 270)
+        {
+            m_geo.desc = dePrivate.m_values.last().toString();
         } else if (dePrivate.m_tag == 33550)
         {
             m_geo.pixelWidth = dePrivate.m_values.at(0).toDouble();
@@ -478,4 +513,10 @@ auto TiffFile::getRect() const -> QGeoRectangle
     coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
     rect.setBottomRight(coord);
     return rect;
+}
+
+
+auto TiffFile::getDesc() const -> QString
+{
+    return m_geo.desc;
 }
