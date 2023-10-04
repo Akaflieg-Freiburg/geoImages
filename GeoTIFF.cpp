@@ -491,7 +491,14 @@ auto TiffFile::getMeta() const -> GeoMaps::GeoTiffMeta
     coord.setLatitude(m_geo.latitude);
     meta.rect.setTopLeft(coord);
     coord.setLongitude(m_geo.longitute + (m_geo.width - 1) * m_geo.pixelWidth);
-    coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
+    if (m_geo.pixelHeight > 0)
+    {
+        coord.setLatitude(m_geo.latitude - (m_geo.height - 1) * m_geo.pixelHeight);
+    }
+    else
+    {
+        coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
+    }
     meta.rect.setBottomRight(coord);
     meta.desc = m_geo.desc;
     return meta;
