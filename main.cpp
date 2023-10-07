@@ -21,15 +21,23 @@ auto main(int argc, char *argv[]) -> int
     }
 
     const QString& fileName = args[0];
-    FileFormats::GeoTiffMeta const geoTiffMeta = FileFormats::GeoTIFF::readMetaData(fileName);
-
-    qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
-               << geoTiffMeta.rect.bottomLeft().longitude()
-               << geoTiffMeta.rect.bottomRight().longitude()
-               << geoTiffMeta.rect.bottomLeft().latitude()
-               << geoTiffMeta.rect.topLeft().latitude() ;
-
-    qWarning() << u"Description of the image" << geoTiffMeta.desc;
+    FileFormats::GeoTIFF const geoTIFF(fileName);
+    if (geoTIFF.isValid())
+    {
+        qWarning() << u"GeoTIFF file %1 is valid"_qs.arg(fileName);
+        qWarning() << u"Name"_qs << geoTIFF.name();
+        auto rect = geoTIFF.bBox();
+        qWarning() << u"Corner coordinates:"_qs
+                   << rect.bottomLeft().longitude()
+                   << rect.bottomRight().longitude()
+                   << rect.bottomLeft().latitude()
+                   << rect.topLeft().latitude() ;
+    }
+    else
+    {
+        qWarning() << u"GeoTIFF file %1 is invalid."_qs.arg(fileName);
+        qWarning() << geoTIFF.error();
+    }
 
     // Quick check if we can read the raster image
     QImage const img(fileName);

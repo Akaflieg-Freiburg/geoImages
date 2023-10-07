@@ -40,6 +40,15 @@
 
 enum Tiff_ByteOrder { LittleEndian, BigEndian };
 
+namespace FileFormats
+{
+
+struct GeoTiffMeta {
+    QGeoRectangle rect;
+    QString desc;
+};
+
+}
 
 namespace  {
 
@@ -65,12 +74,6 @@ template<typename T> inline auto fixValueByteOrder(T value, Tiff_ByteOrder byteO
 
 
 
-QString err_256_not_set = QString::fromLatin1("Tag 256 is not set");
-QString err_257_not_set = QString::fromLatin1("Tag 257 is not set");
-QString err_33550_not_set = QString::fromLatin1("Tag 33550 is not set");
-QString err_33922_not_set = QString::fromLatin1("Tag 33922 is not set");
-QString err_file_read = QString::fromLatin1("File read error");
-QString err_seek_pos = QString::fromLatin1("Fail to seek pos: ");
 
 
 class TiffIfdEntry
@@ -147,7 +150,7 @@ private:
             return;
         }
         // To make things simple, save normal integer as qint32 or quint32 here.
-        for (int i = 0; i < m_count; ++i)
+        for (qsizetype i = 0; i < m_count; ++i)
         {
             switch (m_type)
             {
@@ -158,7 +161,7 @@ private:
                 double f;
                 if (byteOrder == BigEndian)
                 {
-                    char rbytes[8];
+                    std::array<char,8> rbytes;
                     rbytes[0] = bytes[i*8+7];
                     rbytes[1] = bytes[i*8+6];
                     rbytes[2] = bytes[i*8+5];
@@ -167,7 +170,7 @@ private:
                     rbytes[5] = bytes[i*8+2];
                     rbytes[6] = bytes[i*8+1];
                     rbytes[7] = bytes[i*8];
-                    memcpy( &f, rbytes, 8 );
+                    memcpy( &f, rbytes.data(), 8 );
                 }
                 else
                 {
@@ -183,7 +186,7 @@ private:
 
     quint16 m_tag;
     quint16 m_type;
-    quint64 m_count{ 0 };
+    qsizetype m_count {0};
     QByteArray m_valueOrOffset; // 12 bytes for tiff or 20 bytes for bigTiff
     QVariantList m_values;
 };
@@ -215,7 +218,7 @@ private:
         auto bytesRead = m_file.read(reinterpret_cast<char *>(&v), sizeof(T));
         if (bytesRead != sizeof(T))
         {
-            throw err_file_read;
+            throw QObject::tr("Error reading file.", "FileFormats::GeoTIFF");
         }
         return fixValueByteOrder(v, m_header.byteOrder);
     }
@@ -249,22 +252,23 @@ private:
 };
 
 
-auto FileFormats::GeoTIFF::readMetaData(const QString& path) -> GeoTiffMeta
+
+
+FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
 {
-    TiffFile const tiff(path);
+    TiffFile const tiff(fileName);
 
     try
     {
-        return tiff.getMeta();
+        auto result = tiff.getMeta();
+        m_bBox = result.rect;
+        m_name = result.desc;
     }
     catch (QString& ex)
     {
-        qWarning() << " " << ex;
+        setError(ex);
     }
-
-    return {}; // Return a default-constructed (hence invalid) GeoTiffMeta
 }
-
 
 
 
@@ -366,7 +370,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             auto &dePrivate = ifdEntry;
             dePrivate.m_tag = getValueFromFile<quint16>();
             dePrivate.m_type = getValueFromFile<quint16>();
-            dePrivate.m_count = getValueFromFile<quint64>();
+            dePrivate.m_count = qsizetype(getValueFromFile<quint64>());
             dePrivate.m_valueOrOffset = m_file.read(8);
             if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
             {
@@ -393,16 +397,16 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
             auto valueOffset = getValueFromBytes<quint32>(de.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek(valueOffset))
             {
-                throw err_seek_pos + QString::number(valueOffset);
+                throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
             }
             valueBytes = m_file.read(valueBytesCount);
         }
         else if (m_header.isBigTiff() && valueBytesCount > 8)
         {
             auto valueOffset = getValueFromBytes<quint64>(de.m_valueOrOffset, m_header.byteOrder);
-            if (!m_file.seek(valueOffset))
+            if (!m_file.seek( qint64(valueOffset) ))
             {
-                throw err_seek_pos + QString::number(valueOffset);
+                throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
             }
             valueBytes = m_file.read(valueBytesCount);
         }
@@ -464,19 +468,19 @@ auto TiffFile::getMeta() const -> FileFormats::GeoTiffMeta
 {
     if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
-        throw err_33922_not_set;
+        throw QObject::tr("Tag 33922 is not set", "FileFormats::GeoTIFF");
     }
     if ((m_geo.pixelWidth == 0) || (m_geo.pixelHeight == 0))
     {
-        throw err_33550_not_set;
+        throw QObject::tr("Tag 33550 is not set", "FileFormats::GeoTIFF");
     }
     if (m_geo.width == 0)
     {
-        throw err_256_not_set;
+        throw QObject::tr("Tag 256 is not set", "FileFormats::GeoTIFF");
     }
     if (m_geo.height == 0)
     {
-        throw err_257_not_set;
+        throw QObject::tr("Tag 257 is not set", "FileFormats::GeoTIFF");
     }
 
     FileFormats::GeoTiffMeta meta;

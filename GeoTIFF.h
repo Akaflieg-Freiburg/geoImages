@@ -27,22 +27,51 @@
 
 namespace FileFormats
 {
-    struct GeoTiffMeta {
-        QGeoRectangle rect;
-        QString desc;
-    };
 
-    class GeoTIFF : public DataFileAbstract
-    {
-    public:
-        /*! \brief Reads coordinates and description from a georeferenced image file
-         *
-         *  @param path File path for a georeferenced image file
-         *
-         *  @return Coordinates of the image corners and description of the image.
-         *  If no valid georeferencing data was found, an invalid GeoTiffMeta is returned
-         */
-        static auto readMetaData(const QString& path) -> GeoTiffMeta;
-    };
+/*! \brief Trip Kit
+ *
+ *  This class reads GeoTIFF files, as specified here:
+ *  https://gis-lab.info/docs/geotiff-1.8.2.pdf
+ *
+ *  It extracts bounding box coordinates, as well as the name of the file. This
+ *  class does not read the raster data. GeoTIFF is a huge and complex standard,
+ *  and this class is definitively not able to read all possible valid GeoTIFF
+ *  files. We restrict ourselves to files that appear in real-world aviation.
+ */
 
-} // namespace GeoMaps
+class GeoTIFF : public DataFileAbstract
+{
+public:
+    /*! \brief Constructor
+     *
+     *  The constructor opens and analyzes the GeoTIFF file. It does not read
+     *  the raster data.
+     *
+     *  \param fileName File name of a GeoTIFF file.
+     */
+    GeoTIFF(const QString& fileName);
+
+
+
+    //
+    // Getter Methods
+    //
+
+    /*! \brief Name, as specified in the GeoTIFF file
+     *
+     *  @returns The name or an empty string if no name is specified.
+     */
+    [[nodiscard]] QString name() const { return m_name; }
+
+    /*! \brief Bounding box, as specified in the GeoTIFF file
+     *
+     *  @returns Bounding box, which might be invalid
+     */
+    [[nodiscard]] QGeoRectangle bBox() const { return m_bBox; }
+
+private:
+    QGeoRectangle m_bBox;
+    QString m_name;
+};
+
+} // namespace FileFormats
