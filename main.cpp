@@ -21,7 +21,7 @@ auto main(int argc, char *argv[]) -> int
     }
 
     const QString& fileName = args[0];
-    GeoMaps::GeoTiffMeta geoTiffMeta = GeoMaps::GeoTIFF::readMetaData(fileName);
+    FileFormats::GeoTiffMeta const geoTiffMeta = FileFormats::GeoTIFF::readMetaData(fileName);
 
     qWarning() << u"Corner coordinates for image %1:"_qs.arg(fileName)
                << geoTiffMeta.rect.bottomLeft().longitude()

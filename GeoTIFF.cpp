@@ -32,24 +32,11 @@
  *
  ****************************************************************************/
 
-
-#include <QImage>
-#include <QScopedPointer>
-#include <QVector>
-#include <QVariant>
-#include <QExplicitlySharedDataPointer>
-#include "GeoTIFF.h"
 #include <QFile>
-#include <QLoggingCategory>
+#include <QVariant>
 #include <QtEndian>
-#include <QSharedData>
-#include <algorithm>
-#include <QGeoRectangle>
 
-class QByteArray;
-class TiffFile;
-class TiffIfd;
-class TiffIfdEntry;
+#include "GeoTIFF.h"
 
 enum Tiff_ByteOrder { LittleEndian, BigEndian };
 
@@ -142,15 +129,19 @@ private:
 
     void parserValues(const char *bytes, Tiff_ByteOrder byteOrder)
     {
-        if (m_type == TiffIfdEntry::DT_Ascii) {
+        if (m_type == TiffIfdEntry::DT_Ascii)
+        {
             int start = 0;
-            for (int i = 0; i < m_count; ++i) {
-                if (bytes[i] == '\0') {
+            for (int i = 0; i < m_count; ++i)
+            {
+                if (bytes[i] == '\0')
+                {
                     m_values.append(QString::fromLatin1(bytes + start, i - start));
                     start = i + 1;
                 }
             }
-            if (bytes[m_count - 1] != '\0') {
+            if (bytes[m_count - 1] != '\0')
+            {
                 m_values.append(QString::fromLatin1(bytes + start, m_count - start));
             }
             return;
@@ -208,9 +199,9 @@ class TiffIfd
 class TiffFile
 {
 public:
-    TiffFile(const QString &filePath);
+    TiffFile(const QString& filePath);
 
-    [[nodiscard]] auto getMeta() const -> GeoMaps::GeoTiffMeta;
+    [[nodiscard]] auto getMeta() const -> FileFormats::GeoTiffMeta;
 
 
 private:
@@ -258,7 +249,7 @@ private:
 };
 
 
-auto GeoMaps::GeoTIFF::readMetaData(const QString& path) -> GeoTiffMeta
+auto FileFormats::GeoTIFF::readMetaData(const QString& path) -> GeoTiffMeta
 {
     TiffFile const tiff(path);
 
@@ -423,23 +414,26 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         if (dePrivate.m_tag == 256)
         {
             m_geo.width = dePrivate.m_values.last().toInt();
-        } else if (dePrivate.m_tag == 257)
+        }
+        else if (dePrivate.m_tag == 257)
         {
             m_geo.height = dePrivate.m_values.last().toInt();
-        } else if (dePrivate.m_tag == 270)
+        }
+        else if (dePrivate.m_tag == 270)
         {
             m_geo.desc = dePrivate.m_values.last().toString();
-        } else if (dePrivate.m_tag == 33550)
+        }
+        else if (dePrivate.m_tag == 33550)
         {
             m_geo.pixelWidth = dePrivate.m_values.at(0).toDouble();
             m_geo.pixelHeight = dePrivate.m_values.at(1).toDouble();
-        } else if (dePrivate.m_tag == 33922)
+        }
+        else if (dePrivate.m_tag == 33922)
         {
             m_geo.longitute = dePrivate.m_values.at(3).toDouble();
             m_geo.latitude = dePrivate.m_values.at(4).toDouble();
         }
     }
-
     return true;
 }
 
@@ -466,7 +460,7 @@ TiffFile::TiffFile(const QString &filePath)
 }
 
 
-auto TiffFile::getMeta() const -> GeoMaps::GeoTiffMeta
+auto TiffFile::getMeta() const -> FileFormats::GeoTiffMeta
 {
     if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
@@ -485,7 +479,7 @@ auto TiffFile::getMeta() const -> GeoMaps::GeoTiffMeta
         throw err_257_not_set;
     }
 
-    GeoMaps::GeoTiffMeta meta;
+    FileFormats::GeoTiffMeta meta;
     QGeoCoordinate coord;
     coord.setLongitude(m_geo.longitute);
     coord.setLatitude(m_geo.latitude);

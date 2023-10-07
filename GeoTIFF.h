@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2022 by Stefan Kebekus                                  *
+ *   Copyright (C) 2023 by Stefan Kebekus                                  *
  *   stefan.kebekus@gmail.com                                              *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -23,14 +23,16 @@
 #include <QGeoRectangle>
 #include <QString>
 
-namespace GeoMaps
+#include "DataFileAbstract.h"
+
+namespace FileFormats
 {
     struct GeoTiffMeta {
         QGeoRectangle rect;
         QString desc;
     };
 
-    class GeoTIFF
+    class GeoTIFF : public DataFileAbstract
     {
     public:
         /*! \brief Reads coordinates and description from a georeferenced image file
@@ -40,7 +42,7 @@ namespace GeoMaps
          *  @return Coordinates of the image corners and description of the image.
          *  If no valid georeferencing data was found, an invalid GeoTiffMeta is returned
          */
-        static auto readMetaData(const QString &path) -> GeoTiffMeta;
+        static auto readMetaData(const QString& path) -> GeoTiffMeta;
     };
 
 } // namespace GeoMaps
