@@ -158,7 +158,7 @@ private:
                 m_values.append(static_cast<quint32>(getValueFromBytes<quint16>(bytes + i * 2, byteOrder)));
                 break;
             case TiffIfdEntry::DT_Double:
-                double f;
+                double resultingFloat;
                 if (byteOrder == BigEndian)
                 {
                     std::array<char,8> rbytes;
@@ -170,13 +170,13 @@ private:
                     rbytes[5] = bytes[i*8+2];
                     rbytes[6] = bytes[i*8+1];
                     rbytes[7] = bytes[i*8];
-                    memcpy( &f, rbytes.data(), 8 );
+                    memcpy( &resultingFloat, rbytes.data(), 8 );
                 }
                 else
                 {
-                    memcpy( &f, bytes + i * 8, 8 );
+                    memcpy( &resultingFloat, bytes + i * 8, 8 );
                 }
-                m_values.append(f);
+                m_values.append(resultingFloat);
                 break;
             default:
                 break;
@@ -214,13 +214,13 @@ private:
 
     template<typename T> auto getValueFromFile() -> T
     {
-        T v{ 0 };
-        auto bytesRead = m_file.read(reinterpret_cast<char *>(&v), sizeof(T));
+        T value {0};
+        auto bytesRead = m_file.read(reinterpret_cast<char *>(&value), sizeof(T));
         if (bytesRead != sizeof(T))
         {
             throw QObject::tr("Error reading file.", "FileFormats::GeoTIFF");
         }
-        return fixValueByteOrder(v, m_header.byteOrder);
+        return fixValueByteOrder(value, m_header.byteOrder);
     }
 
     struct Header
@@ -252,8 +252,6 @@ private:
 };
 
 
-
-
 FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
 {
     TiffFile const tiff(fileName);
@@ -283,7 +281,6 @@ void TiffFile::setError(const QString &errorString)
     m_hasError = true;
     m_errorString = errorString;
 }
-
 
 auto TiffFile::readHeader() -> bool
 {
@@ -381,9 +378,9 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
     }
 
     // parser data of ifdEntry
-    foreach (auto de, ifd.m_ifdEntries)
+    foreach (auto ifdEntry, ifd.m_ifdEntries)
     {
-        auto &dePrivate = de;
+        auto &dePrivate = ifdEntry;
 
         auto valueBytesCount = dePrivate.m_count * dePrivate.typeSize();
         // skip unknown datatype
@@ -394,7 +391,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         QByteArray valueBytes;
         if (!m_header.isBigTiff() && valueBytesCount > 4)
         {
-            auto valueOffset = getValueFromBytes<quint32>(de.m_valueOrOffset, m_header.byteOrder);
+            auto valueOffset = getValueFromBytes<quint32>(ifdEntry.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek(valueOffset))
             {
                 throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
@@ -403,7 +400,7 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
         }
         else if (m_header.isBigTiff() && valueBytesCount > 8)
         {
-            auto valueOffset = getValueFromBytes<quint64>(de.m_valueOrOffset, m_header.byteOrder);
+            auto valueOffset = getValueFromBytes<quint64>(ifdEntry.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek( qint64(valueOffset) ))
             {
                 throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
