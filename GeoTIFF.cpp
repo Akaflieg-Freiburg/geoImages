@@ -33,287 +33,38 @@
  ****************************************************************************/
 
 #include <QFile>
-#include <QVariant>
-#include <QtEndian>
 
 #include "GeoTIFF.h"
 
-enum Tiff_ByteOrder { LittleEndian, BigEndian };
 
-namespace FileFormats
+bool FileFormats::GeoTIFF::readHeader()
 {
-
-struct GeoTiffMeta {
-    QGeoRectangle rect;
-    QString desc;
-};
-
-}
-
-namespace  {
-
-template<typename T> inline auto getValueFromBytes(const char *bytes, Tiff_ByteOrder byteOrder) -> T
-{
-    if (byteOrder == LittleEndian)
-    {
-        return qFromLittleEndian<T>(reinterpret_cast<const uchar *>(bytes));
-    }
-    return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
-}
-
-template<typename T> inline auto fixValueByteOrder(T value, Tiff_ByteOrder byteOrder) -> T
-{
-    if (byteOrder == LittleEndian)
-    {
-        return qFromLittleEndian<T>(value);
-    }
-    return qFromBigEndian<T>(value);
-}
-
-}
-
-
-
-
-
-class TiffIfdEntry
-{
-public:
-    enum DataType {
-        DT_Byte = 1,
-        DT_Ascii,
-        DT_Short,
-        DT_Long,
-        DT_Rational,
-        DT_SByte,
-        DT_Undefined,
-        DT_SShort,
-        DT_SLong,
-        DT_SRational,
-        DT_Float,
-        DT_Double,
-        DT_Ifd,
-        DT_Long8,
-        DT_SLong8,
-        DT_Ifd8
-    };
-
-private:
-    friend class TiffFile;
-
-    [[nodiscard]] auto typeSize() const -> int
-    {
-        switch (m_type) {
-        case TiffIfdEntry::DT_Byte:
-        case TiffIfdEntry::DT_SByte:
-        case TiffIfdEntry::DT_Ascii:
-        case TiffIfdEntry::DT_Undefined:
-            return 1;
-        case TiffIfdEntry::DT_Short:
-        case TiffIfdEntry::DT_SShort:
-            return 2;
-        case TiffIfdEntry::DT_Long:
-        case TiffIfdEntry::DT_SLong:
-        case TiffIfdEntry::DT_Ifd:
-        case TiffIfdEntry::DT_Float:
-            return 4;
-
-        case TiffIfdEntry::DT_Rational:
-        case TiffIfdEntry::DT_SRational:
-        case TiffIfdEntry::DT_Long8:
-        case TiffIfdEntry::DT_SLong8:
-        case TiffIfdEntry::DT_Ifd8:
-        case TiffIfdEntry::DT_Double:
-            return 8;
-        default:
-            return 0;
-        }
-    }
-
-    void parserValues(const char *bytes, Tiff_ByteOrder byteOrder)
-    {
-        if (m_type == TiffIfdEntry::DT_Ascii)
-        {
-            int start = 0;
-            for (int i = 0; i < m_count; ++i)
-            {
-                if (bytes[i] == '\0')
-                {
-                    m_values.append(QString::fromLatin1(bytes + start, i - start));
-                    start = i + 1;
-                }
-            }
-            if (bytes[m_count - 1] != '\0')
-            {
-                m_values.append(QString::fromLatin1(bytes + start, m_count - start));
-            }
-            return;
-        }
-        // To make things simple, save normal integer as qint32 or quint32 here.
-        for (qsizetype i = 0; i < m_count; ++i)
-        {
-            switch (m_type)
-            {
-            case TiffIfdEntry::DT_Short:
-                m_values.append(static_cast<quint32>(getValueFromBytes<quint16>(bytes + i * 2, byteOrder)));
-                break;
-            case TiffIfdEntry::DT_Double:
-                double resultingFloat;
-                if (byteOrder == BigEndian)
-                {
-                    std::array<char,8> rbytes;
-                    rbytes[0] = bytes[i*8+7];
-                    rbytes[1] = bytes[i*8+6];
-                    rbytes[2] = bytes[i*8+5];
-                    rbytes[3] = bytes[i*8+4];
-                    rbytes[4] = bytes[i*8+3];
-                    rbytes[5] = bytes[i*8+2];
-                    rbytes[6] = bytes[i*8+1];
-                    rbytes[7] = bytes[i*8];
-                    memcpy( &resultingFloat, rbytes.data(), 8 );
-                }
-                else
-                {
-                    memcpy( &resultingFloat, bytes + i * 8, 8 );
-                }
-                m_values.append(resultingFloat);
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    quint16 m_tag;
-    quint16 m_type;
-    qsizetype m_count {0};
-    QByteArray m_valueOrOffset; // 12 bytes for tiff or 20 bytes for bigTiff
-    QVariantList m_values;
-};
-
-class TiffIfd
-{
-    friend class TiffFile;
-
-    QVector<TiffIfdEntry> m_ifdEntries;
-    qint64 m_nextIfdOffset{ 0 };
-};
-
-class TiffFile
-{
-public:
-    TiffFile(const QString& filePath);
-
-    [[nodiscard]] auto getMeta() const -> FileFormats::GeoTiffMeta;
-
-
-private:
-    void setError(const QString &errorString);
-    auto readHeader() -> bool;
-    auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
-
-    template<typename T> auto getValueFromFile() -> T
-    {
-        T value {0};
-        auto bytesRead = m_file.read(reinterpret_cast<char *>(&value), sizeof(T));
-        if (bytesRead != sizeof(T))
-        {
-            throw QObject::tr("Error reading file.", "FileFormats::GeoTIFF");
-        }
-        return fixValueByteOrder(value, m_header.byteOrder);
-    }
-
-    struct Header
-    {
-        QByteArray rawBytes;
-        Tiff_ByteOrder byteOrder{ LittleEndian };
-        quint16 version{ 42 };
-        qint64 ifd0Offset{ 0 };
-
-        [[nodiscard]] auto isBigTiff() const -> bool { return version == 43; }
-    } m_header;
-
-    struct Geo
-    {
-        quint16 width = 0;
-        quint16 height = 0;
-        double longitute = 0;
-        double latitude = 0;
-        double pixelWidth = 0;
-        double pixelHeight = 0;
-        QString desc;
-    } m_geo;
-
-    QVector<TiffIfd> m_ifds;
-
-    QFile m_file;
-    QString m_errorString;
-    bool m_hasError {false};
-};
-
-
-FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
-{
-    TiffFile const tiff(fileName);
-
-    try
-    {
-        auto result = tiff.getMeta();
-        m_bBox = result.rect;
-        m_name = result.desc;
-    }
-    catch (QString& ex)
-    {
-        setError(ex);
-    }
-}
-
-
-
-/*!
- * \class TiffIfd
- */
-
-
-
-void TiffFile::setError(const QString &errorString)
-{
-    m_hasError = true;
-    m_errorString = errorString;
-}
-
-auto TiffFile::readHeader() -> bool
-{
-    auto headerBytes = m_file.peek(8);
-    if (headerBytes.size() != 8)
-    {
-        setError(QStringLiteral("Invalid tiff file"));
-        return false;
-    }
-
     // magic bytes
-    auto magicBytes = headerBytes.left(2);
-    if (magicBytes == QByteArray("II"))
+    auto magicBytes = m_file.read(2);
+    if (magicBytes == "II")
     {
         m_header.byteOrder = LittleEndian;
+        m_dataStream.setByteOrder(QDataStream::LittleEndian);
     }
-    else if (magicBytes == QByteArray("MM"))
+    else if (magicBytes == "MM")
     {
         m_header.byteOrder = BigEndian;
+        m_dataStream.setByteOrder(QDataStream::BigEndian);
     }
     else
     {
-        setError(QStringLiteral("Invalid tiff file"));
+        setError( QObject::tr("Invalid TIFF file", "FileFormats::GeoTIFF") );
         return false;
     }
 
     // version
-    m_header.version = getValueFromBytes<quint16>(headerBytes.data() + 2, m_header.byteOrder);
-    if (m_header.version != 42 && m_header.version != 43)
+    m_dataStream >> m_header.version;
+    if ((m_header.version != 42) && (m_header.version != 43))
     {
         setError(QStringLiteral("Invalid tiff file: Unknown version"));
         return false;
     }
+    m_file.seek(0);
     m_header.rawBytes = m_file.read(m_header.isBigTiff() ? 16 : 8);
 
     // ifd0Offset
@@ -327,10 +78,12 @@ auto TiffFile::readHeader() -> bool
         m_header.ifd0Offset = getValueFromBytes<qint64>(m_header.rawBytes.data() + 8, m_header.byteOrder);
     }
 
+    m_file.seek(0);
     return true;
 }
 
-auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
+
+auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
 {
     if (!m_file.seek(offset))
     {
@@ -443,25 +196,38 @@ auto TiffFile::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
  * Constructs the TiffFile object.
  */
 
-TiffFile::TiffFile(const QString &filePath)
+FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
 {
-    m_file.setFileName(filePath);
+    m_file.setFileName(fileName);
     if (!m_file.open(QFile::ReadOnly))
     {
-        m_hasError = true;
-        m_errorString = m_file.errorString();
+        setError(m_file.errorString());
+        return;
     }
+    m_dataStream.setDevice(&m_file);
 
     if (!readHeader())
     {
+        m_file.close();
         return;
     }
 
-    readIfd(m_header.ifd0Offset);
+    try
+    {
+        readIfd(m_header.ifd0Offset);
+        auto result = getMeta();
+        m_bBox = result.rect;
+        m_name = result.desc;
+    }
+    catch (QString& ex)
+    {
+        setError(ex);
+    }
+    m_file.close();
 }
 
 
-auto TiffFile::getMeta() const -> FileFormats::GeoTiffMeta
+auto FileFormats::GeoTIFF::getMeta() const -> FileFormats::GeoTIFF::GeoTiffMeta
 {
     if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
@@ -480,7 +246,7 @@ auto TiffFile::getMeta() const -> FileFormats::GeoTiffMeta
         throw QObject::tr("Tag 257 is not set", "FileFormats::GeoTIFF");
     }
 
-    FileFormats::GeoTiffMeta meta;
+    FileFormats::GeoTIFF::GeoTiffMeta meta;
     QGeoCoordinate coord;
     coord.setLongitude(m_geo.longitute);
     coord.setLatitude(m_geo.latitude);

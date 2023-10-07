@@ -32,6 +32,11 @@ auto main(int argc, char *argv[]) -> int
                    << rect.bottomRight().longitude()
                    << rect.bottomLeft().latitude()
                    << rect.topLeft().latitude() ;
+
+        // Quick check if we can read the raster image
+        QImage const img(fileName);
+        qWarning() << img;
+        img.save("t.png");
     }
     else
     {
@@ -39,10 +44,6 @@ auto main(int argc, char *argv[]) -> int
         qWarning() << geoTIFF.error();
     }
 
-    // Quick check if we can read the raster image
-    QImage const img(fileName);
-    qWarning() << img;
-    img.save("t.png");
 
     return 0;
 }
