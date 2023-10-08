@@ -37,49 +37,44 @@
 #include "GeoTIFF.h"
 
 
-bool FileFormats::GeoTIFF::readHeader()
+qint64 FileFormats::GeoTIFF::readHeader()
 {
     // magic bytes
     auto magicBytes = m_file.read(2);
     if (magicBytes == "II")
     {
-        m_header.byteOrder = LittleEndian;
+        m_header.byteOrder = QDataStream::LittleEndian;
         m_dataStream.setByteOrder(QDataStream::LittleEndian);
     }
     else if (magicBytes == "MM")
     {
-        m_header.byteOrder = BigEndian;
+        m_header.byteOrder = QDataStream::BigEndian;
         m_dataStream.setByteOrder(QDataStream::BigEndian);
     }
     else
     {
         setError( QObject::tr("Invalid TIFF file", "FileFormats::GeoTIFF") );
-        return false;
+        return -1;
     }
 
     // version
-    m_dataStream >> m_header.version;
-    if ((m_header.version != 42) && (m_header.version != 43))
+    quint16 version;
+    m_dataStream >> version;
+    if (version == 43)
     {
-        setError(QStringLiteral("Invalid tiff file: Unknown version"));
-        return false;
+        setError( QObject::tr("BigTIFF files are not supported", "FileFormats::GeoTIFF") );
+        return -1;
     }
-    m_file.seek(0);
-    m_header.rawBytes = m_file.read(m_header.isBigTiff() ? 16 : 8);
+    if (version != 42)
+    {
+        setError( QObject::tr("Unsupported TIFF version", "FileFormats::GeoTIFF") );
+        return -1;
+    }
 
     // ifd0Offset
-    if (!m_header.isBigTiff())
-    {
-        m_header.ifd0Offset =
-            getValueFromBytes<quint32>(m_header.rawBytes.data() + 4, m_header.byteOrder);
-    }
-    else
-    {
-        m_header.ifd0Offset = getValueFromBytes<qint64>(m_header.rawBytes.data() + 8, m_header.byteOrder);
-    }
-
-    m_file.seek(0);
-    return true;
+    quint32 result;
+    m_dataStream >> result;
+    return result;;
 }
 
 
@@ -93,8 +88,6 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
 
     TiffIfd ifd;
 
-    if (!m_header.isBigTiff())
-    {
         auto const deCount = getValueFromFile<quint16>();
         for (int i = 0; i < deCount; ++i)
         {
@@ -110,25 +103,6 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
             }
         }
         ifd.m_nextIfdOffset = getValueFromFile<quint32>();
-    }
-    else
-    {
-        auto const deCount = getValueFromFile<quint64>();
-        for (quint64 i = 0; i < deCount; ++i)
-        {
-            TiffIfdEntry ifdEntry;
-            auto &dePrivate = ifdEntry;
-            dePrivate.m_tag = getValueFromFile<quint16>();
-            dePrivate.m_type = getValueFromFile<quint16>();
-            dePrivate.m_count = qsizetype(getValueFromFile<quint64>());
-            dePrivate.m_valueOrOffset = m_file.read(8);
-            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
-            {
-                ifd.m_ifdEntries.append(ifdEntry);
-            }
-        }
-        ifd.m_nextIfdOffset = getValueFromFile<qint64>();
-    }
 
     // parser data of ifdEntry
     foreach (auto ifdEntry, ifd.m_ifdEntries)
@@ -142,19 +116,10 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
             continue;
         }
         QByteArray valueBytes;
-        if (!m_header.isBigTiff() && valueBytesCount > 4)
+        if (valueBytesCount > 4)
         {
             auto valueOffset = getValueFromBytes<quint32>(ifdEntry.m_valueOrOffset, m_header.byteOrder);
             if (!m_file.seek(valueOffset))
-            {
-                throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
-            }
-            valueBytes = m_file.read(valueBytesCount);
-        }
-        else if (m_header.isBigTiff() && valueBytesCount > 8)
-        {
-            auto valueOffset = getValueFromBytes<quint64>(ifdEntry.m_valueOrOffset, m_header.byteOrder);
-            if (!m_file.seek( qint64(valueOffset) ))
             {
                 throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
             }
@@ -206,7 +171,8 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
     }
     m_dataStream.setDevice(&m_file);
 
-    if (!readHeader())
+    auto ifd0Offset = readHeader();
+    if (ifd0Offset <= 0)
     {
         m_file.close();
         return;
@@ -214,7 +180,7 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
 
     try
     {
-        readIfd(m_header.ifd0Offset);
+        readIfd(ifd0Offset);
         auto result = getMeta();
         m_bBox = result.rect;
         m_name = result.desc;

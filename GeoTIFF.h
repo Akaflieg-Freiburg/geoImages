@@ -81,10 +81,6 @@ private:
         QString desc;
     };
 
-
-    enum Tiff_ByteOrder { LittleEndian, BigEndian };
-
-
     class TiffIfdEntry
     {
     public:
@@ -139,7 +135,7 @@ private:
             }
         }
 
-        void parserValues(const char *bytes, Tiff_ByteOrder byteOrder)
+        void parserValues(const char *bytes, QDataStream::ByteOrder byteOrder)
         {
             if (m_type == TiffIfdEntry::DT_Ascii)
             {
@@ -168,7 +164,7 @@ private:
                     break;
                 case TiffIfdEntry::DT_Double:
                     double resultingFloat;
-                    if (byteOrder == BigEndian)
+                    if (byteOrder == QDataStream::BigEndian)
                     {
                         std::array<char,8> rbytes;
                         rbytes[0] = bytes[i*8+7];
@@ -212,7 +208,7 @@ private:
 
     [[nodiscard]] auto getMeta() const -> GeoTiffMeta;
 
-    bool readHeader();
+    qint64 readHeader();
 
     auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
 
@@ -229,12 +225,7 @@ private:
 
     struct Header
     {
-        QByteArray rawBytes;
-        Tiff_ByteOrder byteOrder{ LittleEndian };
-        quint16 version{ 42 };
-        qint64 ifd0Offset{ 0 };
-
-        [[nodiscard]] auto isBigTiff() const -> bool { return version == 43; }
+        QDataStream::ByteOrder byteOrder{ QDataStream::LittleEndian };
     } m_header;
 
     struct Geo
@@ -248,18 +239,18 @@ private:
         QString desc;
     } m_geo;
 
-    template<typename T> static auto getValueFromBytes(const char *bytes, Tiff_ByteOrder byteOrder) -> T
+    template<typename T> static auto getValueFromBytes(const char *bytes, QDataStream::ByteOrder byteOrder) -> T
     {
-        if (byteOrder == LittleEndian)
+        if (byteOrder == QDataStream::LittleEndian)
         {
             return qFromLittleEndian<T>(reinterpret_cast<const uchar *>(bytes));
         }
         return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
     }
 
-    template<typename T> static auto fixValueByteOrder(T value, Tiff_ByteOrder byteOrder) -> T
+    template<typename T> static auto fixValueByteOrder(T value, QDataStream::ByteOrder byteOrder) -> T
     {
-        if (byteOrder == LittleEndian)
+        if (byteOrder == QDataStream::LittleEndian)
         {
             return qFromLittleEndian<T>(value);
         }
