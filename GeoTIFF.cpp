@@ -43,12 +43,10 @@ qint64 FileFormats::GeoTIFF::readHeader()
     auto magicBytes = m_file.read(2);
     if (magicBytes == "II")
     {
-        m_header.byteOrder = QDataStream::LittleEndian;
         m_dataStream.setByteOrder(QDataStream::LittleEndian);
     }
     else if (magicBytes == "MM")
     {
-        m_header.byteOrder = QDataStream::BigEndian;
         m_dataStream.setByteOrder(QDataStream::BigEndian);
     }
     else
@@ -118,7 +116,7 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
         QByteArray valueBytes;
         if (valueBytesCount > 4)
         {
-            auto valueOffset = getValueFromBytes<quint32>(ifdEntry.m_valueOrOffset, m_header.byteOrder);
+            auto valueOffset = getValueFromBytes<quint32>(ifdEntry.m_valueOrOffset, m_dataStream.byteOrder());
             if (!m_file.seek(valueOffset))
             {
                 throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
@@ -129,7 +127,7 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
         {
             valueBytes = dePrivate.m_valueOrOffset;
         }
-        dePrivate.parserValues(valueBytes, m_header.byteOrder);
+        dePrivate.parserValues(valueBytes, m_dataStream.byteOrder());
         if (dePrivate.m_tag == 256)
         {
             m_geo.width = dePrivate.m_values.last().toInt();

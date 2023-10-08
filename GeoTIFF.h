@@ -220,13 +220,9 @@ private:
         {
             throw QObject::tr("Error reading file.", "FileFormats::GeoTIFF");
         }
-        return fixValueByteOrder(value, m_header.byteOrder);
+        return fixValueByteOrder(value, m_dataStream.byteOrder());
     }
 
-    struct Header
-    {
-        QDataStream::ByteOrder byteOrder{ QDataStream::LittleEndian };
-    } m_header;
 
     struct Geo
     {
