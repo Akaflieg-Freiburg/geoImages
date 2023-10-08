@@ -191,16 +191,6 @@ private:
         QVariantList m_values;
     };
 
-    class TiffIfd
-    {
-        friend class GeoTIFF;
-
-        QVector<TiffIfdEntry> m_ifdEntries;
-        quint32 m_nextIfdOffset{ 0 };
-    };
-
-
-
     void getMeta();
 
     qint64 readHeader();
@@ -226,8 +216,6 @@ private:
         }
         return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
     }
-
-    QVector<TiffIfd> m_ifds;
 
     QFile m_file;
     QDataStream m_dataStream;
