@@ -180,9 +180,7 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
     try
     {
         readIfd(ifd0Offset);
-        auto result = getMeta();
-        m_bBox = result.rect;
-        m_name = result.desc;
+        getMeta();
     }
     catch (QString& ex)
     {
@@ -192,7 +190,7 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
 }
 
 
-auto FileFormats::GeoTIFF::getMeta() const -> FileFormats::GeoTIFF::GeoTiffMeta
+void FileFormats::GeoTIFF::getMeta()
 {
     if ((m_geo.longitute == 0) || (m_geo.latitude == 0))
     {
@@ -211,11 +209,10 @@ auto FileFormats::GeoTIFF::getMeta() const -> FileFormats::GeoTIFF::GeoTiffMeta
         throw QObject::tr("Tag 257 is not set", "FileFormats::GeoTIFF");
     }
 
-    FileFormats::GeoTIFF::GeoTiffMeta meta;
     QGeoCoordinate coord;
     coord.setLongitude(m_geo.longitute);
     coord.setLatitude(m_geo.latitude);
-    meta.rect.setTopLeft(coord);
+    m_bBox.setTopLeft(coord);
     coord.setLongitude(m_geo.longitute + (m_geo.width - 1) * m_geo.pixelWidth);
     if (m_geo.pixelHeight > 0)
     {
@@ -225,7 +222,6 @@ auto FileFormats::GeoTIFF::getMeta() const -> FileFormats::GeoTIFF::GeoTiffMeta
     {
         coord.setLatitude(m_geo.latitude + (m_geo.height - 1) * m_geo.pixelHeight);
     }
-    meta.rect.setBottomRight(coord);
-    meta.desc = m_geo.desc;
-    return meta;
+    m_bBox.setBottomRight(coord);
+    m_name = m_geo.desc;
 }

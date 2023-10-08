@@ -76,11 +76,6 @@ private:
     QGeoRectangle m_bBox;
     QString m_name;
 
-    struct GeoTiffMeta {
-        QGeoRectangle rect;
-        QString desc;
-    };
-
     class TiffIfdEntry
     {
     public:
@@ -206,7 +201,7 @@ private:
 
 
 
-    [[nodiscard]] auto getMeta() const -> GeoTiffMeta;
+    void getMeta();
 
     qint64 readHeader();
 
