@@ -191,7 +191,7 @@ private:
 
         quint16 m_tag;
         quint16 m_type;
-        qsizetype m_count {0};
+        quint32 m_count {0};
         QByteArray m_valueOrOffset; // 12 bytes for tiff or 20 bytes for bigTiff
         QVariantList m_values;
     };
@@ -201,7 +201,7 @@ private:
         friend class GeoTIFF;
 
         QVector<TiffIfdEntry> m_ifdEntries;
-        qint64 m_nextIfdOffset{ 0 };
+        quint32 m_nextIfdOffset{ 0 };
     };
 
 
@@ -210,19 +210,7 @@ private:
 
     qint64 readHeader();
 
-    auto readIfd(qint64 offset, TiffIfd *parentIfd = nullptr) -> bool;
-
-    template<typename T> auto getValueFromFile() -> T
-    {
-        T value {0};
-        auto bytesRead = m_file.read(reinterpret_cast<char *>(&value), sizeof(T));
-        if (bytesRead != sizeof(T))
-        {
-            throw QObject::tr("Error reading file.", "FileFormats::GeoTIFF");
-        }
-        return fixValueByteOrder(value, m_dataStream.byteOrder());
-    }
-
+    bool readIfd(qint64 offset);
 
     struct Geo
     {
@@ -244,14 +232,6 @@ private:
         return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
     }
 
-    template<typename T> static auto fixValueByteOrder(T value, QDataStream::ByteOrder byteOrder) -> T
-    {
-        if (byteOrder == QDataStream::LittleEndian)
-        {
-            return qFromLittleEndian<T>(value);
-        }
-        return qFromBigEndian<T>(value);
-    }
     QVector<TiffIfd> m_ifds;
 
     QFile m_file;

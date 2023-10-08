@@ -76,7 +76,7 @@ qint64 FileFormats::GeoTIFF::readHeader()
 }
 
 
-auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bool
+bool FileFormats::GeoTIFF::readIfd(qint64 offset)
 {
     if (!m_file.seek(offset))
     {
@@ -86,21 +86,22 @@ auto FileFormats::GeoTIFF::readIfd(qint64 offset, TiffIfd * /*parentIfd*/) -> bo
 
     TiffIfd ifd;
 
-        auto const deCount = getValueFromFile<quint16>();
-        for (int i = 0; i < deCount; ++i)
+    quint16 deCount;
+    m_dataStream >> deCount;
+    for (int i = 0; i < deCount; ++i)
+    {
+        TiffIfdEntry ifdEntry;
+        auto &dePrivate = ifdEntry;
+        m_dataStream >> dePrivate.m_tag;
+        m_dataStream >> dePrivate.m_type;
+        m_dataStream >> dePrivate.m_count;
+        dePrivate.m_valueOrOffset = m_file.read(4);
+        if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
         {
-            TiffIfdEntry ifdEntry;
-            auto &dePrivate = ifdEntry;
-            dePrivate.m_tag = getValueFromFile<quint16>();
-            dePrivate.m_type = getValueFromFile<quint16>();
-            dePrivate.m_count = getValueFromFile<quint32>();
-            dePrivate.m_valueOrOffset = m_file.read(4);
-            if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
-            {
-                ifd.m_ifdEntries.append(ifdEntry);
-            }
+            ifd.m_ifdEntries.append(ifdEntry);
         }
-        ifd.m_nextIfdOffset = getValueFromFile<quint32>();
+    }
+    m_dataStream >> ifd.m_nextIfdOffset;
 
     // parser data of ifdEntry
     foreach (auto ifdEntry, ifd.m_ifdEntries)
