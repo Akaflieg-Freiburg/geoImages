@@ -56,7 +56,7 @@ qint64 FileFormats::GeoTIFF::readHeader()
     }
 
     // version
-    quint16 version;
+    quint16 version = 0;
     m_dataStream >> version;
     if (version == 43)
     {
@@ -70,10 +70,64 @@ qint64 FileFormats::GeoTIFF::readHeader()
     }
 
     // ifd0Offset
-    quint32 result;
+    quint32 result = 0;
     m_dataStream >> result;
     return result;;
 }
+
+
+FileFormats::GeoTIFF::TIFFField FileFormats::GeoTIFF::readTIFFField()
+{
+    TIFFField field;
+    m_dataStream >> field.m_tag;
+    m_dataStream >> field.m_type;
+    m_dataStream >> field.m_count;
+
+    auto filePos = m_file.pos();
+
+    auto byteSize = field.typeSize()*field.m_count;
+    if (byteSize > 4)
+    {
+        quint32 newPos = 0;
+        m_dataStream >> newPos;
+        m_file.seek(newPos);
+    }
+
+
+    switch (field.m_type)
+    {
+    case TIFFField::DT_Ascii:
+    {
+        auto tmpBytes = m_file.read(field.m_count);
+        foreach(auto stringBytes, tmpBytes.split(0))
+        {
+            field.m_values.append(QString::fromLatin1(stringBytes));
+        }
+    }
+    case TIFFField::DT_Short:
+        for (quint32 i = 0; i < field.m_count; ++i)
+        {
+            quint16 tmpInt = 0;
+            m_dataStream >> tmpInt;
+            field.m_values.append(tmpInt);
+        }
+        break;
+    case TIFFField::DT_Double:
+        for (quint32 i = 0; i < field.m_count; ++i)
+        {
+            double tmpFloat = qQNaN();
+            m_dataStream >> tmpFloat;
+            field.m_values.append(tmpFloat);
+        }
+        break;
+    default:
+        break;
+    }
+
+    m_file.seek(filePos+4);
+    return field;
+}
+
 
 
 bool FileFormats::GeoTIFF::readIfd(qint64 offset)
@@ -84,71 +138,45 @@ bool FileFormats::GeoTIFF::readIfd(qint64 offset)
         return false;
     }
 
-    QVector<TiffIfdEntry> m_ifdEntries;
+    QVector<TIFFField> m_ifdEntries;
 
-    quint16 deCount;
+    quint16 deCount = 0;
     m_dataStream >> deCount;
     for (quint16 i = 0; i < deCount; ++i)
     {
-        TiffIfdEntry ifdEntry;
-        auto &dePrivate = ifdEntry;
-        m_dataStream >> dePrivate.m_tag;
-        m_dataStream >> dePrivate.m_type;
-        m_dataStream >> dePrivate.m_count;
-        dePrivate.m_valueOrOffset = m_file.read(4);
-        if ((dePrivate.m_tag == 256) || (dePrivate.m_tag == 257) || (dePrivate.m_tag == 270) || (dePrivate.m_tag == 33550) || (dePrivate.m_tag == 33922))
+        auto field = readTIFFField();
+        if ((field.m_tag == 256) || (field.m_tag == 257) || (field.m_tag == 270) || (field.m_tag == 33550) || (field.m_tag == 33922))
         {
-            m_ifdEntries.append(ifdEntry);
+            m_ifdEntries.append(field);
         }
     }
 
-    // parser data of ifdEntry
-    foreach (auto ifdEntry, m_ifdEntries)
-    {
-        auto &dePrivate = ifdEntry;
 
-        auto valueBytesCount = dePrivate.m_count * dePrivate.typeSize();
-        // skip unknown datatype
-        if (valueBytesCount == 0)
+    // parser data of ifdEntry
+    foreach (auto field, m_ifdEntries)
+    {
+        qWarning() << field.m_tag << field.m_values;
+        if (field.m_tag == 256)
         {
-            continue;
+            m_geo.width = field.m_values.last().toInt();
         }
-        QByteArray valueBytes;
-        if (valueBytesCount > 4)
+        else if (field.m_tag == 257)
         {
-            auto valueOffset = getValueFromBytes<quint32>(ifdEntry.m_valueOrOffset, m_dataStream.byteOrder());
-            if (!m_file.seek(valueOffset))
-            {
-                throw QObject::tr("File seek error", "FileFormats::GeoTIFF");
-            }
-            valueBytes = m_file.read(valueBytesCount);
+            m_geo.height = field.m_values.last().toInt();
         }
-        else
+        else if (field.m_tag == 270)
         {
-            valueBytes = dePrivate.m_valueOrOffset;
+            m_geo.desc = field.m_values.last().toString();
         }
-        dePrivate.parserValues(valueBytes, m_dataStream.byteOrder());
-        if (dePrivate.m_tag == 256)
+        else if (field.m_tag == 33550)
         {
-            m_geo.width = dePrivate.m_values.last().toInt();
+            m_geo.pixelWidth = field.m_values.at(0).toDouble();
+            m_geo.pixelHeight = field.m_values.at(1).toDouble();
         }
-        else if (dePrivate.m_tag == 257)
+        else if (field.m_tag == 33922)
         {
-            m_geo.height = dePrivate.m_values.last().toInt();
-        }
-        else if (dePrivate.m_tag == 270)
-        {
-            m_geo.desc = dePrivate.m_values.last().toString();
-        }
-        else if (dePrivate.m_tag == 33550)
-        {
-            m_geo.pixelWidth = dePrivate.m_values.at(0).toDouble();
-            m_geo.pixelHeight = dePrivate.m_values.at(1).toDouble();
-        }
-        else if (dePrivate.m_tag == 33922)
-        {
-            m_geo.longitute = dePrivate.m_values.at(3).toDouble();
-            m_geo.latitude = dePrivate.m_values.at(4).toDouble();
+            m_geo.longitute = field.m_values.at(3).toDouble();
+            m_geo.latitude = field.m_values.at(4).toDouble();
         }
     }
     return true;

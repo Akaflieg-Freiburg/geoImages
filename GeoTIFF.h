@@ -76,7 +76,7 @@ private:
     QGeoRectangle m_bBox;
     QString m_name;
 
-    class TiffIfdEntry
+    class TIFFField
     {
     public:
         enum DataType {
@@ -104,26 +104,26 @@ private:
         [[nodiscard]] auto typeSize() const -> int
         {
             switch (m_type) {
-            case TiffIfdEntry::DT_Byte:
-            case TiffIfdEntry::DT_SByte:
-            case TiffIfdEntry::DT_Ascii:
-            case TiffIfdEntry::DT_Undefined:
+            case TIFFField::DT_Byte:
+            case TIFFField::DT_SByte:
+            case TIFFField::DT_Ascii:
+            case TIFFField::DT_Undefined:
                 return 1;
-            case TiffIfdEntry::DT_Short:
-            case TiffIfdEntry::DT_SShort:
+            case TIFFField::DT_Short:
+            case TIFFField::DT_SShort:
                 return 2;
-            case TiffIfdEntry::DT_Long:
-            case TiffIfdEntry::DT_SLong:
-            case TiffIfdEntry::DT_Ifd:
-            case TiffIfdEntry::DT_Float:
+            case TIFFField::DT_Long:
+            case TIFFField::DT_SLong:
+            case TIFFField::DT_Ifd:
+            case TIFFField::DT_Float:
                 return 4;
 
-            case TiffIfdEntry::DT_Rational:
-            case TiffIfdEntry::DT_SRational:
-            case TiffIfdEntry::DT_Long8:
-            case TiffIfdEntry::DT_SLong8:
-            case TiffIfdEntry::DT_Ifd8:
-            case TiffIfdEntry::DT_Double:
+            case TIFFField::DT_Rational:
+            case TIFFField::DT_SRational:
+            case TIFFField::DT_Long8:
+            case TIFFField::DT_SLong8:
+            case TIFFField::DT_Ifd8:
+            case TIFFField::DT_Double:
                 return 8;
             default:
                 return 0;
@@ -132,7 +132,7 @@ private:
 
         void parserValues(const char *bytes, QDataStream::ByteOrder byteOrder)
         {
-            if (m_type == TiffIfdEntry::DT_Ascii)
+            if (m_type == TIFFField::DT_Ascii)
             {
                 int start = 0;
                 for (int i = 0; i < m_count; ++i)
@@ -154,10 +154,10 @@ private:
             {
                 switch (m_type)
                 {
-                case TiffIfdEntry::DT_Short:
+                case TIFFField::DT_Short:
                     m_values.append(static_cast<quint32>(getValueFromBytes<quint16>(bytes + i * 2, byteOrder)));
                     break;
-                case TiffIfdEntry::DT_Double:
+                case TIFFField::DT_Double:
                     double resultingFloat;
                     if (byteOrder == QDataStream::BigEndian)
                     {
@@ -196,6 +196,8 @@ private:
     qint64 readHeader();
 
     bool readIfd(qint64 offset);
+
+    TIFFField readTIFFField();
 
     struct Geo
     {
