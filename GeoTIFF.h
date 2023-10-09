@@ -48,7 +48,7 @@ public:
     /*! \brief Constructor
      *
      *  The constructor opens and analyzes the GeoTIFF file. It does not read
-     *  the raster data.
+     *  the raster data and is therefore lightweight.
      *
      *  \param fileName File name of a GeoTIFF file.
      */
@@ -71,6 +71,18 @@ public:
      *  @returns Bounding box, which might be invalid
      */
     [[nodiscard]] QGeoRectangle bBox() const { return m_bBox; }
+
+
+
+    //
+    // Static methods
+    //
+
+    /*! \brief Mime type for files that can be opened by this class
+     *
+     *  @returns Name of mime type
+     */
+    [[nodiscard]] static QStringList mimeTypes() { return {u"image/tiff"_qs}; }
 
 private:
     QGeoRectangle m_bBox;
@@ -117,7 +129,6 @@ private:
             case TIFFField::DT_Ifd:
             case TIFFField::DT_Float:
                 return 4;
-
             case TIFFField::DT_Rational:
             case TIFFField::DT_SRational:
             case TIFFField::DT_Long8:
@@ -130,94 +141,18 @@ private:
             }
         }
 
-        void parserValues(const char *bytes, QDataStream::ByteOrder byteOrder)
-        {
-            if (m_type == TIFFField::DT_Ascii)
-            {
-                int start = 0;
-                for (int i = 0; i < m_count; ++i)
-                {
-                    if (bytes[i] == '\0')
-                    {
-                        m_values.append(QString::fromLatin1(bytes + start, i - start));
-                        start = i + 1;
-                    }
-                }
-                if (bytes[m_count - 1] != '\0')
-                {
-                    m_values.append(QString::fromLatin1(bytes + start, m_count - start));
-                }
-                return;
-            }
-            // To make things simple, save normal integer as qint32 or quint32 here.
-            for (qsizetype i = 0; i < m_count; ++i)
-            {
-                switch (m_type)
-                {
-                case TIFFField::DT_Short:
-                    m_values.append(static_cast<quint32>(getValueFromBytes<quint16>(bytes + i * 2, byteOrder)));
-                    break;
-                case TIFFField::DT_Double:
-                    double resultingFloat;
-                    if (byteOrder == QDataStream::BigEndian)
-                    {
-                        std::array<char,8> rbytes;
-                        rbytes[0] = bytes[i*8+7];
-                        rbytes[1] = bytes[i*8+6];
-                        rbytes[2] = bytes[i*8+5];
-                        rbytes[3] = bytes[i*8+4];
-                        rbytes[4] = bytes[i*8+3];
-                        rbytes[5] = bytes[i*8+2];
-                        rbytes[6] = bytes[i*8+1];
-                        rbytes[7] = bytes[i*8];
-                        memcpy( &resultingFloat, rbytes.data(), 8 );
-                    }
-                    else
-                    {
-                        memcpy( &resultingFloat, bytes + i * 8, 8 );
-                    }
-                    m_values.append(resultingFloat);
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-
-        quint16 m_tag;
-        quint16 m_type;
-        quint32 m_count {0};
-        QByteArray m_valueOrOffset; // 12 bytes for tiff or 20 bytes for bigTiff
+        quint16 m_tag {0};
+        quint16 m_type {TIFFField::DT_Undefined};
         QVariantList m_values;
     };
 
-    void getMeta();
-
     qint64 readHeader();
 
-    bool readIfd(qint64 offset);
+    bool readIFD(qint64 offset);
 
     TIFFField readTIFFField();
 
-    struct Geo
-    {
-        quint16 width = 0;
-        quint16 height = 0;
-        double longitute = 0;
-        double latitude = 0;
-        double pixelWidth = 0;
-        double pixelHeight = 0;
-        QString desc;
-    } m_geo;
-
-    template<typename T> static auto getValueFromBytes(const char *bytes, QDataStream::ByteOrder byteOrder) -> T
-    {
-        if (byteOrder == QDataStream::LittleEndian)
-        {
-            return qFromLittleEndian<T>(reinterpret_cast<const uchar *>(bytes));
-        }
-        return qFromBigEndian<T>(reinterpret_cast<const uchar *>(bytes));
-    }
+//    QMap<quint16, QVariantList> readTIFFFields();
 
     QFile m_file;
     QDataStream m_dataStream;
