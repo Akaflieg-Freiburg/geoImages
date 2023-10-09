@@ -113,33 +113,6 @@ private:
     private:
         friend class GeoTIFF;
 
-        [[nodiscard]] auto typeSize() const -> int
-        {
-            switch (m_type) {
-            case TIFFField::DT_Byte:
-            case TIFFField::DT_SByte:
-            case TIFFField::DT_Ascii:
-            case TIFFField::DT_Undefined:
-                return 1;
-            case TIFFField::DT_Short:
-            case TIFFField::DT_SShort:
-                return 2;
-            case TIFFField::DT_Long:
-            case TIFFField::DT_SLong:
-            case TIFFField::DT_Ifd:
-            case TIFFField::DT_Float:
-                return 4;
-            case TIFFField::DT_Rational:
-            case TIFFField::DT_SRational:
-            case TIFFField::DT_Long8:
-            case TIFFField::DT_SLong8:
-            case TIFFField::DT_Ifd8:
-            case TIFFField::DT_Double:
-                return 8;
-            default:
-                return 0;
-            }
-        }
 
         quint16 m_tag {0};
         quint16 m_type {TIFFField::DT_Undefined};
@@ -150,9 +123,10 @@ private:
 
     bool readIFD(qint64 offset);
 
-    TIFFField readTIFFField();
+    void readTIFFField();
+    void interpretGeoData();
 
-//    QMap<quint16, QVariantList> readTIFFFields();
+    QMap<quint16, QVariantList> m_TIFFFields;
 
     QFile m_file;
     QDataStream m_dataStream;

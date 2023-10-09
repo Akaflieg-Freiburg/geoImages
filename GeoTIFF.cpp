@@ -76,18 +76,56 @@ qint64 FileFormats::GeoTIFF::readHeader()
 }
 
 
-FileFormats::GeoTIFF::TIFFField FileFormats::GeoTIFF::readTIFFField()
+void FileFormats::GeoTIFF::readTIFFField()
 {
-    TIFFField field;
-    quint32 m_count {0};
+    quint32 m_count = 0;
+    quint16 m_tag = 0;
+    quint16 m_type = TIFFField::DT_Undefined;
+    QVariantList m_values;
 
-    m_dataStream >> field.m_tag;
-    m_dataStream >> field.m_type;
+    m_dataStream >> m_tag;
+    m_dataStream >> m_type;
     m_dataStream >> m_count;
+
+    int typeSize = 0;
+    switch(m_type)
+    {
+    case TIFFField::DT_Byte:
+    case TIFFField::DT_SByte:
+    case TIFFField::DT_Ascii:
+    case TIFFField::DT_Undefined:
+        typeSize = 1;
+        break;
+
+    case TIFFField::DT_Short:
+    case TIFFField::DT_SShort:
+        typeSize = 2;
+        break;
+
+    case TIFFField::DT_Long:
+    case TIFFField::DT_SLong:
+    case TIFFField::DT_Ifd:
+    case TIFFField::DT_Float:
+        typeSize = 4;
+        break;
+
+    case TIFFField::DT_Rational:
+    case TIFFField::DT_SRational:
+    case TIFFField::DT_Long8:
+    case TIFFField::DT_SLong8:
+    case TIFFField::DT_Ifd8:
+    case TIFFField::DT_Double:
+        typeSize = 8;
+        break;
+
+    default:
+        typeSize = 0;
+        break;
+    }
 
     auto filePos = m_file.pos();
 
-    auto byteSize = field.typeSize()*m_count;
+    auto byteSize = typeSize*m_count;
     if (byteSize > 4)
     {
         quint32 newPos = 0;
@@ -96,22 +134,23 @@ FileFormats::GeoTIFF::TIFFField FileFormats::GeoTIFF::readTIFFField()
     }
 
 
-    switch (field.m_type)
+    switch (m_type)
     {
     case TIFFField::DT_Ascii:
     {
         auto tmpBytes = m_file.read(m_count);
         foreach(auto stringBytes, tmpBytes.split(0))
         {
-            field.m_values.append(QString::fromLatin1(stringBytes));
+            m_values.append(QString::fromLatin1(stringBytes));
         }
     }
+    break;
     case TIFFField::DT_Short:
         for (quint32 i = 0; i < m_count; ++i)
         {
             quint16 tmpInt = 0;
             m_dataStream >> tmpInt;
-            field.m_values.append(tmpInt);
+            m_values.append(tmpInt);
         }
         break;
     case TIFFField::DT_Double:
@@ -119,15 +158,15 @@ FileFormats::GeoTIFF::TIFFField FileFormats::GeoTIFF::readTIFFField()
         {
             double tmpFloat = qQNaN();
             m_dataStream >> tmpFloat;
-            field.m_values.append(tmpFloat);
+            m_values.append(tmpFloat);
         }
         break;
     default:
         break;
     }
-
     m_file.seek(filePos+4);
-    return field;
+
+    m_TIFFFields[m_tag] = m_values;
 }
 
 
@@ -138,8 +177,21 @@ bool FileFormats::GeoTIFF::readIFD(qint64 offset)
         setError(m_file.errorString());
         return false;
     }
+    quint16 deCount = 0;
+    m_dataStream >> deCount;
+    for (quint16 i = 0; i < deCount; ++i)
+    {
+        readTIFFField();
+    }
 
 
+
+    return true;
+}
+
+
+void FileFormats::GeoTIFF::interpretGeoData()
+{
     quint16 width = 0;
     quint16 height = 0;
     double longitute = 0;
@@ -148,52 +200,37 @@ bool FileFormats::GeoTIFF::readIFD(qint64 offset)
     double pixelHeight = 0;
     QString desc;
 
-
-    quint16 deCount = 0;
-    m_dataStream >> deCount;
-    for (quint16 i = 0; i < deCount; ++i)
-    {
-        auto field = readTIFFField();
-        if (field.m_tag == 256)
-        {
-            width = field.m_values.constLast().toInt();
-        }
-        else if (field.m_tag == 257)
-        {
-            height = field.m_values.constLast().toInt();
-        }
-        else if (field.m_tag == 270)
-        {
-            desc = field.m_values.constLast().toString();
-        }
-        else if (field.m_tag == 33550)
-        {
-            pixelWidth = field.m_values.at(0).toDouble();
-            pixelHeight = field.m_values.at(1).toDouble();
-        }
-        else if (field.m_tag == 33922)
-        {
-            longitute = field.m_values.at(3).toDouble();
-            latitude = field.m_values.at(4).toDouble();
-        }
-    }
-
-    if ((longitute == 0) || (latitude == 0))
-    {
-        throw QObject::tr("Tag 33922 is not set", "FileFormats::GeoTIFF");
-    }
-    if ((pixelWidth == 0) || (pixelHeight == 0))
-    {
-        throw QObject::tr("Tag 33550 is not set", "FileFormats::GeoTIFF");
-    }
-    if (width == 0)
+    if (!m_TIFFFields.contains(256))
     {
         throw QObject::tr("Tag 256 is not set", "FileFormats::GeoTIFF");
     }
-    if (height == 0)
+    width = m_TIFFFields.value(256).constLast().toInt();
+
+    if (!m_TIFFFields.contains(257))
     {
         throw QObject::tr("Tag 257 is not set", "FileFormats::GeoTIFF");
     }
+    height = m_TIFFFields[257].constLast().toInt();
+
+    if (!m_TIFFFields.contains(33922))
+    {
+        throw QObject::tr("Tag 33922 is not set", "FileFormats::GeoTIFF");
+    }
+    longitute = m_TIFFFields[33922].at(3).toDouble();
+    latitude = m_TIFFFields[33922].at(4).toDouble();
+
+    if (!m_TIFFFields.contains(33550))
+    {
+        throw QObject::tr("Tag 33550 is not set", "FileFormats::GeoTIFF");
+    }
+    pixelWidth = m_TIFFFields[33550].at(0).toDouble();
+    pixelHeight = m_TIFFFields[33550].at(1).toDouble();
+
+    if (m_TIFFFields.contains(270))
+    {
+        desc = m_TIFFFields[270].constLast().toString();
+    }
+
 
     QGeoCoordinate coord;
     coord.setLongitude(longitute);
@@ -210,9 +247,6 @@ bool FileFormats::GeoTIFF::readIFD(qint64 offset)
     }
     m_bBox.setBottomRight(coord);
     m_name = desc;
-
-
-    return true;
 }
 
 
@@ -240,6 +274,7 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
     try
     {
         readIFD(ifd0Offset);
+        interpretGeoData();
     }
     catch (QString& ex)
     {
