@@ -88,40 +88,18 @@ private:
     QGeoRectangle m_bBox;
     QString m_name;
 
-    class TIFFField
-    {
-    public:
-        enum DataType {
-            DT_Byte = 1,
-            DT_Ascii,
-            DT_Short,
-            DT_Long,
-            DT_Rational,
-            DT_SByte,
-            DT_Undefined,
-            DT_SShort,
-            DT_SLong,
-            DT_SRational,
-            DT_Float,
-            DT_Double,
-            DT_Ifd,
-            DT_Long8,
-            DT_SLong8,
-            DT_Ifd8
-        };
+    /* This methods assumes reads the TIFF header data from the device.
+     * On success, it set the correct endianness in the datastream and
+     * positions the device at the beginning of the first IFD. On failure,
+     * it throws a QString with a human-readable, translated error message.
+     *
+     * @param device QIODevice from which the TIFF header will be read. This device must be seekable.
+     *
+     * @param dataStream QDataStream connected to the device
+     */
+    void readHeader(QIODevice& device, QDataStream& dataStream);
 
-    private:
-        friend class GeoTIFF;
-
-
-        quint16 m_tag {0};
-        quint16 m_type {TIFFField::DT_Undefined};
-        QVariantList m_values;
-    };
-
-    qint64 readHeader();
-
-    bool readIFD(qint64 offset);
+    bool readIFD();
 
     void readTIFFField();
     void interpretGeoData();

@@ -36,11 +36,30 @@
 
 #include "GeoTIFF.h"
 
+enum DataType {
+    DT_Byte = 1,
+    DT_Ascii,
+    DT_Short,
+    DT_Long,
+    DT_Rational,
+    DT_SByte,
+    DT_Undefined,
+    DT_SShort,
+    DT_SLong,
+    DT_SRational,
+    DT_Float,
+    DT_Double,
+    DT_Ifd,
+    DT_Long8,
+    DT_SLong8,
+    DT_Ifd8
+};
 
-qint64 FileFormats::GeoTIFF::readHeader()
+
+void FileFormats::GeoTIFF::readHeader(QIODevice& device, QDataStream& dataStream)
 {
     // magic bytes
-    auto magicBytes = m_file.read(2);
+    auto magicBytes = device.read(2);
     if (magicBytes == "II")
     {
         m_dataStream.setByteOrder(QDataStream::LittleEndian);
@@ -51,28 +70,28 @@ qint64 FileFormats::GeoTIFF::readHeader()
     }
     else
     {
-        setError( QObject::tr("Invalid TIFF file", "FileFormats::GeoTIFF") );
-        return -1;
+        throw QObject::tr("Invalid TIFF file", "FileFormats::GeoTIFF");
     }
 
     // version
     quint16 version = 0;
-    m_dataStream >> version;
+    dataStream >> version;
     if (version == 43)
     {
-        setError( QObject::tr("BigTIFF files are not supported", "FileFormats::GeoTIFF") );
-        return -1;
+        throw QObject::tr("BigTIFF files are not supported", "FileFormats::GeoTIFF");
     }
     if (version != 42)
     {
-        setError( QObject::tr("Unsupported TIFF version", "FileFormats::GeoTIFF") );
-        return -1;
+        throw QObject::tr("Unsupported TIFF version", "FileFormats::GeoTIFF");
     }
 
     // ifd0Offset
     quint32 result = 0;
-    m_dataStream >> result;
-    return result;
+    dataStream >> result;
+    if (!m_file.seek(result))
+    {
+        throw m_file.errorString();
+    }
 }
 
 
@@ -80,7 +99,7 @@ void FileFormats::GeoTIFF::readTIFFField()
 {
     quint32 m_count = 0;
     quint16 m_tag = 0;
-    quint16 m_type = TIFFField::DT_Undefined;
+    quint16 m_type = DT_Undefined;
     QVariantList m_values;
 
     m_dataStream >> m_tag;
@@ -90,31 +109,31 @@ void FileFormats::GeoTIFF::readTIFFField()
     int typeSize = 0;
     switch(m_type)
     {
-    case TIFFField::DT_Byte:
-    case TIFFField::DT_SByte:
-    case TIFFField::DT_Ascii:
-    case TIFFField::DT_Undefined:
+    case DT_Byte:
+    case DT_SByte:
+    case DT_Ascii:
+    case DT_Undefined:
         typeSize = 1;
         break;
 
-    case TIFFField::DT_Short:
-    case TIFFField::DT_SShort:
+    case DT_Short:
+    case DT_SShort:
         typeSize = 2;
         break;
 
-    case TIFFField::DT_Long:
-    case TIFFField::DT_SLong:
-    case TIFFField::DT_Ifd:
-    case TIFFField::DT_Float:
+    case DT_Long:
+    case DT_SLong:
+    case DT_Ifd:
+    case DT_Float:
         typeSize = 4;
         break;
 
-    case TIFFField::DT_Rational:
-    case TIFFField::DT_SRational:
-    case TIFFField::DT_Long8:
-    case TIFFField::DT_SLong8:
-    case TIFFField::DT_Ifd8:
-    case TIFFField::DT_Double:
+    case DT_Rational:
+    case DT_SRational:
+    case DT_Long8:
+    case DT_SLong8:
+    case DT_Ifd8:
+    case DT_Double:
         typeSize = 8;
         break;
 
@@ -136,7 +155,7 @@ void FileFormats::GeoTIFF::readTIFFField()
 
     switch (m_type)
     {
-    case TIFFField::DT_Ascii:
+    case DT_Ascii:
     {
         auto tmpBytes = m_file.read(m_count);
         foreach(auto stringBytes, tmpBytes.split(0))
@@ -145,7 +164,7 @@ void FileFormats::GeoTIFF::readTIFFField()
         }
     }
     break;
-    case TIFFField::DT_Short:
+    case DT_Short:
         for (quint32 i = 0; i < m_count; ++i)
         {
             quint16 tmpInt = 0;
@@ -153,7 +172,7 @@ void FileFormats::GeoTIFF::readTIFFField()
             m_values.append(tmpInt);
         }
         break;
-    case TIFFField::DT_Double:
+    case DT_Double:
         for (quint32 i = 0; i < m_count; ++i)
         {
             double tmpFloat = qQNaN();
@@ -170,13 +189,8 @@ void FileFormats::GeoTIFF::readTIFFField()
 }
 
 
-bool FileFormats::GeoTIFF::readIFD(qint64 offset)
+bool FileFormats::GeoTIFF::readIFD()
 {
-    if (!m_file.seek(offset))
-    {
-        setError(m_file.errorString());
-        return false;
-    }
     quint16 deCount = 0;
     m_dataStream >> deCount;
     for (quint16 i = 0; i < deCount; ++i)
@@ -264,16 +278,11 @@ FileFormats::GeoTIFF::GeoTIFF(const QString& fileName)
     }
     m_dataStream.setDevice(&m_file);
 
-    auto ifd0Offset = readHeader();
-    if (ifd0Offset <= 0)
-    {
-        m_file.close();
-        return;
-    }
 
     try
     {
-        readIFD(ifd0Offset);
+        readHeader(m_file, m_dataStream);
+        readIFD();
         interpretGeoData();
     }
     catch (QString& ex)
