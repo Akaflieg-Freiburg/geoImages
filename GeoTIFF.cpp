@@ -311,7 +311,7 @@ void FileFormats::GeoTIFF::interpretGeoData()
                 throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");
             }
 
-            QGeoCoordinate coord(lat, lon);
+            QGeoCoordinate const coord(lat, lon);
             if (!coord.isValid())
             {
                 throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");

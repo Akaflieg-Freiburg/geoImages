@@ -9,9 +9,9 @@ auto main(int argc, char *argv[]) -> int
     QCoreApplication const app(argc, argv);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Test for geoImages");
+    parser.setApplicationDescription(u"Test for geoImages"_qs);
     parser.addHelpOption();
-    parser.addPositionalArgument("image", "GeoTagged Image File");
+    parser.addPositionalArgument(u"image"_qs, u"GeoTagged Image File"_qs);
     parser.process(app);
 
     const QStringList args = parser.positionalArguments();
@@ -36,7 +36,7 @@ auto main(int argc, char *argv[]) -> int
         // Quick check if we can read the raster image
         QImage const img(fileName);
         qWarning() << img;
-        img.save("t.png");
+        img.save(u"t.png"_qs);
     }
     else
     {
