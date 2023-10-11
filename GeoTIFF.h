@@ -54,6 +54,14 @@ public:
      */
     GeoTIFF(const QString& fileName);
 
+    /*! \brief Constructor
+     *
+     *  The constructor opens and analyzes the GeoTIFF file. It does not read
+     *  the raster data and is therefore lightweight.
+     *
+     *  \param device Device from which the GeoTIFF is read. The device must be opened and seekable. The device will not be closed by this method.
+     */
+    GeoTIFF(QIODevice& device);
 
 
     //
@@ -88,7 +96,7 @@ private:
     QGeoRectangle m_bBox;
     QString m_name;
 
-    /* This methods assumes reads the TIFF header data from the device.
+    /* This methods reads the TIFF header data from the device.
      * On success, it set the correct endianness in the datastream and
      * positions the device at the beginning of the first IFD. On failure,
      * it throws a QString with a human-readable, translated error message.
@@ -97,17 +105,45 @@ private:
      *
      * @param dataStream QDataStream connected to the device
      */
-    void readHeader(QIODevice& device, QDataStream& dataStream);
+    void readTIFFData(QIODevice& device);
 
-    bool readIFD();
+    /* This methods reads the TIFF header data from the device.
+     * On success, it set the correct endianness in the datastream and
+     * positions the device at the beginning of the first IFD. On failure,
+     * it throws a QString with a human-readable, translated error message.
+     *
+     * @param device QIODevice from which the TIFF header will be read. This device must be open and seekable.
+     *
+     * @param dataStream QDataStream connected to the device.
+     */
+ //   static void readHeader(QIODevice& device, QDataStream& dataStream);
 
-    void readTIFFField();
+    /* This methods reads a TIFF directory from the device.
+     * On success, it fills the member m_TIFFFields with tags and data. On failure,
+     * it throws a QString with a human-readable, translated error message.
+     *
+     * @param device QIODevice from which the TIFF header will be read. This device must be open, seekable, and positioned to
+     * the beginning of the directory structure.
+     *
+     * @param dataStream QDataStream that is connected to the device and has the correct endianness set.
+     */
+//    void readIFD(QIODevice& device, QDataStream& dataStream);
+
+    /* This methods reads a single TIFF field from the device.
+     * On success, it adds an entry to the member m_TIFFFields and positions the device on the byte following the structure. On failure,
+     * it throws a QString with a human-readable, translated error message.
+     *
+     * @param device QIODevice from which the TIFF header will be read. This device must be open, seekable, and positioned to
+     * the beginning of the TIFF field structure.
+     *
+     * @param dataStream QDataStream that is connected to the device and has the correct endianness set.
+     */
+    void readTIFFField(QIODevice& device, QDataStream& dataStream);
+
     void interpretGeoData();
 
     QMap<quint16, QVariantList> m_TIFFFields;
 
-    QFile m_file;
-    QDataStream m_dataStream;
 };
 
 } // namespace FileFormats
