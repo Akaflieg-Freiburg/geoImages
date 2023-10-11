@@ -1,34 +1,22 @@
-/****************************************************************************
- *
- * This file contains code based on Debao Zhang's QtTiffTagViewer
- *
- * https://github.com/dbzhang800/QtTiffTagViewer
- *
- * The code for QtTiffTagViewer is licensed as follows:
- *
- * Copyright (c) 2018 Debao Zhang <hello@debao.me>
- * All right reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- ****************************************************************************/
+/***************************************************************************
+ *   Copyright (C) 2023 by Stefan Kebekus                                  *
+ *   stefan.kebekus@gmail.com                                              *
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 3 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ *   This program is distributed in the hope that it will be useful,       *
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+ *   GNU General Public License for more details.                          *
+ *                                                                         *
+ *   You should have received a copy of the GNU General Public License     *
+ *   along with this program; if not, write to the                         *
+ *   Free Software Foundation, Inc.,                                       *
+ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
+ ***************************************************************************/
 
 #include <QFile>
 
@@ -58,13 +46,15 @@ enum DataType {
     DT_Ifd8
 };
 
-// Checks the status of dataStream. If status is OK, this method does nothing. Otherwiese, it throws a QString with a human-readable, translated error message.
+// Checks the status of dataStream. If status is OK, this method does nothing.
+// Otherwiese, it throws a QString with a human-readable, translated error
+// message.
 void checkForError(QDataStream& dataStream)
 {
     switch(dataStream.status())
     {
     case QDataStream::ReadCorruptData:
-        throw QObject::tr("Found corrupt data.", "FileFormats::GeoTIFF");
+        throw QObject::tr("Found corrupt data while reading the data stream.", "FileFormats::GeoTIFF");
     case QDataStream::ReadPastEnd:
         throw QObject::tr("Read past end of data stream.", "FileFormats::GeoTIFF");
     case QDataStream::WriteFailed:
@@ -127,7 +117,7 @@ void FileFormats::GeoTIFF::readTIFFData(QIODevice& device)
         }
         else
         {
-            throw QObject::tr("Invalid TIFF file", "FileFormats::GeoTIFF");
+            throw QObject::tr("Found invalid TIFF file data.", "FileFormats::GeoTIFF");
         }
 
         // version
@@ -135,11 +125,11 @@ void FileFormats::GeoTIFF::readTIFFData(QIODevice& device)
         dataStream >> version;
         if (version == 43)
         {
-            throw QObject::tr("BigTIFF files are not supported", "FileFormats::GeoTIFF");
+            throw QObject::tr("BigTIFF files are not supported.", "FileFormats::GeoTIFF");
         }
         if (version != 42)
         {
-            throw QObject::tr("Unsupported TIFF version", "FileFormats::GeoTIFF");
+            throw QObject::tr("Found an unsupported TIFF version.", "FileFormats::GeoTIFF");
         }
 
         // ifd0Offset
@@ -221,7 +211,8 @@ void FileFormats::GeoTIFF::readTIFFField(QIODevice& device, QDataStream& dataStr
         break;
     }
 
-    // Save file position and move to the position where the data actually resides.
+    // Save file position and move to the position where the data actually
+    // resides.
     auto filePos = device.pos();
     auto byteSize = typeSize*count;
     if (byteSize > 4)
@@ -287,59 +278,141 @@ void FileFormats::GeoTIFF::readTIFFField(QIODevice& device, QDataStream& dataStr
 
 void FileFormats::GeoTIFF::interpretGeoData()
 {
-    quint16 width = 0;
-    quint16 height = 0;
-    double longitute = 0;
-    double latitude = 0;
-    double pixelWidth = 0;
-    double pixelHeight = 0;
-    QString desc;
-
-    if (!m_TIFFFields.contains(256))
-    {
-        throw QObject::tr("Tag 256 is not set", "FileFormats::GeoTIFF");
-    }
-    width = m_TIFFFields.value(256).constLast().toInt();
-
-    if (!m_TIFFFields.contains(257))
-    {
-        throw QObject::tr("Tag 257 is not set", "FileFormats::GeoTIFF");
-    }
-    height = m_TIFFFields[257].constLast().toInt();
-
-    if (!m_TIFFFields.contains(33922))
-    {
-        throw QObject::tr("Tag 33922 is not set", "FileFormats::GeoTIFF");
-    }
-    longitute = m_TIFFFields[33922].at(3).toDouble();
-    latitude = m_TIFFFields[33922].at(4).toDouble();
-
-    if (!m_TIFFFields.contains(33550))
-    {
-        throw QObject::tr("Tag 33550 is not set", "FileFormats::GeoTIFF");
-    }
-    pixelWidth = m_TIFFFields[33550].at(0).toDouble();
-    pixelHeight = m_TIFFFields[33550].at(1).toDouble();
-
+    // Handle Tag 33922, name
     if (m_TIFFFields.contains(270))
     {
-        desc = m_TIFFFields[270].constLast().toString();
+        auto values = m_TIFFFields[270];
+        if (values.isEmpty())
+        {
+            throw QObject::tr("No data for tag 270.", "FileFormats::GeoTIFF");
+        }
+        m_name = values.constLast().toString();
     }
 
+    // Handle Tag 33922, compute top left of the bounding box
+    {
+        if (m_TIFFFields.contains(33922))
+        {
+            auto values = m_TIFFFields[33922];
+            if (values.size() < 5)
+            {
+                throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");
+            }
 
-    QGeoCoordinate coord;
-    coord.setLongitude(longitute);
-    coord.setLatitude(latitude);
-    m_bBox.setTopLeft(coord);
-    coord.setLongitude(longitute + (width - 1) * pixelWidth);
+            bool ok = false;
+            auto lat = m_TIFFFields[33922].at(4).toDouble(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");
+            }
+            auto lon = m_TIFFFields[33922].at(3).toDouble(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");
+            }
+
+            QGeoCoordinate coord(lat, lon);
+            if (!coord.isValid())
+            {
+                throw QObject::tr("Invalid data for tag 33922.", "FileFormats::GeoTIFF");
+            }
+            m_bBox.setTopLeft(coord);
+        }
+        else
+        {
+            throw QObject::tr("Tag 33922 is not set.", "FileFormats::GeoTIFF");
+        }
+    }
+
+    // Handle Tag 33922, compute pixel width and height
+    double pixelWidth = NAN;
+    double pixelHeight = NAN;
+    {
+        if (m_TIFFFields.contains(33550))
+        {
+            auto values = m_TIFFFields[33550];
+            if (values.size() < 2)
+            {
+                throw QObject::tr("Invalid data for tag 33550.", "FileFormats::GeoTIFF");
+            }
+            bool ok = false;
+            pixelWidth = values.at(0).toDouble(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 33550.", "FileFormats::GeoTIFF");
+            }
+            pixelHeight = values.at(1).toDouble(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 33550.", "FileFormats::GeoTIFF");
+            }
+        }
+        else
+        {
+            throw QObject::tr("Tag 33550 is not set.", "FileFormats::GeoTIFF");
+        }
+    }
+
+    // Handle Tag 256, compute width
+    quint16 width = 0;
+    {
+        if (m_TIFFFields.contains(256))
+        {
+            auto values = m_TIFFFields.value(256);
+            if (values.isEmpty())
+            {
+                throw QObject::tr("No data for tag 256.", "FileFormats::GeoTIFF");
+            }
+            bool ok = false;
+            width = values.constLast().toUInt(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 256.", "FileFormats::GeoTIFF");
+            }
+        }
+        else
+        {
+            throw QObject::tr("Tag 256 is not set.", "FileFormats::GeoTIFF");
+        }
+    }
+
+    // Handle Tag 257, compute height
+    quint16 height = 0;
+    {
+        if (m_TIFFFields.contains(257))
+        {
+            auto values = m_TIFFFields.value(257);
+            if (values.isEmpty())
+            {
+                throw QObject::tr("No data for tag 257.", "FileFormats::GeoTIFF");
+            }
+            bool ok = false;
+            height = values.constLast().toUInt(&ok);
+            if (!ok)
+            {
+                throw QObject::tr("Invalid data for tag 257.", "FileFormats::GeoTIFF");
+            }
+        }
+        else
+        {
+            throw QObject::tr("Tag 257 is not set.", "FileFormats::GeoTIFF");
+        }
+    }
+
+    // Computer bottom right of bounding box
+    QGeoCoordinate coord = m_bBox.topLeft();
+    coord.setLongitude(coord.longitude() + (width-1)*pixelWidth);
     if (pixelHeight > 0)
     {
-        coord.setLatitude(latitude - (height - 1) * pixelHeight);
+        coord.setLatitude(coord.latitude() - (height-1)*pixelHeight);
     }
     else
     {
-        coord.setLatitude(latitude + (height - 1) * pixelHeight);
+        coord.setLatitude(coord.latitude() + (height-1)*pixelHeight);
     }
     m_bBox.setBottomRight(coord);
-    m_name = desc;
+    if (!m_bBox.isValid())
+    {
+        throw QObject::tr("The bounding box is invalid.", "FileFormats::GeoTIFF");
+    }
 }
